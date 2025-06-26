@@ -1,0 +1,43 @@
+mysql_servers:
+  - name: dev-postgres
+    description: "開発環境の PostgreSQL サーバー"
+    engine: postgres
+    host: localhost
+    port: 5432
+    schema: development_db
+    user: dev_user
+    password: your_password_here
+  
+  - name: dev-mysql
+    description: "開発環境の MySQL サーバー"
+    engine: mysql
+    host: localhost
+    port: 3306
+    schema: test_db
+    user: mysql_user
+    password: your_mysql_password
+  
+  - name: production-db
+    description: "本番環境のデータベースサーバー"
+    engine: mysql
+    host: db.example.com
+    port: 3306
+    schema: production_db
+    user: prod_user
+    password: production_password
+  
+  - name: remote-db-with-ssh
+    description: "SSH トンネル経由でアクセスするリモートデータベース"
+    engine: postgres
+    host: localhost  # SSH トンネル経由の場合は localhost を指定
+    port: 5432
+    schema: remote_db
+    user: remote_user
+    password: remote_password
+    ssh_tunnel:
+      host: ssh.example.com
+      port: 22
+      user: ssh_user
+      password: ssh_password  # または private_key_path を使用
+      # private_key_path: ~/.ssh/id_rsa  # パスワードの代わりに秘密鍵を使用する場合
+      # private_key_passphrase: key_passphrase  # 秘密鍵にパスフレーズがある場合

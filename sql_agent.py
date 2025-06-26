@@ -8,11 +8,14 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime, date
 import decimal
+import os
+from contextlib import contextmanager
 
 import psycopg2
 import psycopg2.extras
 import pymysql
 import pymysql.cursors
+from sshtunnel import SSHTunnelForwarder
 
 
 logger = logging.getLogger(__name__)
@@ -28,14 +31,27 @@ class SQLAgent:
         """
         self.config = config
         self.connection = None
+        self.ssh_tunnel = None
         
     def connect(self) -> None:
         """データベースに接続する"""
         try:
+            # SSH トンネルの設定がある場合は先にトンネルを作成
+            if 'ssh_tunnel' in self.config:
+                self._create_ssh_tunnel()
+            
+            # SSH トンネル経由の場合はローカルホストとポートを使用
+            if self.ssh_tunnel:
+                db_host = '127.0.0.1'
+                db_port = self.ssh_tunnel.local_bind_port
+            else:
+                db_host = self.config['host']
+                db_port = self.config['port']
+            
             if self.config['engine'] == 'postgres':
                 self.connection = psycopg2.connect(
-                    host=self.config['host'],
-                    port=self.config['port'],
+                    host=db_host,
+                    port=db_port,
                     database=self.config['schema'],
                     user=self.config['user'],
                     password=self.config['password'],
@@ -43,8 +59,8 @@ class SQLAgent:
                 )
             elif self.config['engine'] == 'mysql':
                 self.connection = pymysql.connect(
-                    host=self.config['host'],
-                    port=self.config['port'],
+                    host=db_host,
+                    port=db_port,
                     database=self.config['schema'],
                     user=self.config['user'],
                     password=self.config['password'],
@@ -58,6 +74,10 @@ class SQLAgent:
             
         except Exception as e:
             logger.error(f"データベース接続エラー ({self.config['name']}): {e}")
+            # エラー時は SSH トンネルも閉じる
+            if self.ssh_tunnel:
+                self.ssh_tunnel.stop()
+                self.ssh_tunnel = None
             raise
     
     def disconnect(self) -> None:
@@ -66,6 +86,12 @@ class SQLAgent:
             self.connection.close()
             self.connection = None
             logger.info(f"データベースから切断しました: {self.config['name']}")
+        
+        # SSH トンネルがある場合は閉じる
+        if self.ssh_tunnel:
+            self.ssh_tunnel.stop()
+            self.ssh_tunnel = None
+            logger.info(f"SSH トンネルを閉じました: {self.config['name']}")
     
     def execute_query(self, sql: str) -> Dict[str, Any]:
         """
@@ -210,6 +236,38 @@ class SQLAgent:
         """コンテキストマネージャーの開始"""
         self.connect()
         return self
+    
+    def _create_ssh_tunnel(self) -> None:
+        """SSH トンネルを作成する"""
+        ssh_config = self.config['ssh_tunnel']
+        
+        # SSH 接続パラメータを設定
+        ssh_params = {
+            'ssh_address_or_host': (ssh_config['host'], ssh_config.get('port', 22)),
+            'ssh_username': ssh_config['user'],
+            'remote_bind_address': (self.config['host'], self.config['port']),
+        }
+        
+        # 認証方法の設定
+        if 'private_key_path' in ssh_config:
+            # 秘密鍵認証
+            key_path = os.path.expanduser(ssh_config['private_key_path'])
+            ssh_params['ssh_pkey'] = key_path
+            
+            # 秘密鍵のパスフレーズがある場合
+            if 'private_key_passphrase' in ssh_config:
+                ssh_params['ssh_private_key_password'] = ssh_config['private_key_passphrase']
+        elif 'password' in ssh_config:
+            # パスワード認証
+            ssh_params['ssh_password'] = ssh_config['password']
+        else:
+            raise ValueError("SSH 認証情報が設定されていません")
+        
+        # SSH トンネルを作成
+        self.ssh_tunnel = SSHTunnelForwarder(**ssh_params)
+        self.ssh_tunnel.start()
+        
+        logger.info(f"SSH トンネルを確立しました: {ssh_config['host']}:{ssh_config.get('port', 22)} -> {self.config['host']}:{self.config['port']}")
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """コンテキストマネージャーの終了"""
