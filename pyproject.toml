@@ -1,11 +1,16 @@
 [project]
-name = "cyberneura-id-svelte-testbot"
+name = "sql-agent-mcp-server"
 version = "0.1.0"
-description = "Add your description here"
+description = "SQL Agent MCP Server - MySQL と Postgres に接続する MCP サーバー"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0.2",
+    "fastmcp>=0.2.0",
+    "python-dotenv>=1.0.0",
+    "psycopg2-binary>=2.9.9",
+    "pymysql>=1.1.1",
+    "pydantic>=2.0.0",
 ]
 [project.optional-dependencies]
 # uv sync --extra test
