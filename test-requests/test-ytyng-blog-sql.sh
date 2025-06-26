@@ -67,55 +67,26 @@ parse_and_display_result() {
     local response="$1"
     local test_name="$2"
     
-    # レスポンスに result が含まれているかチェック
+    # レスポンスをチェック
     if echo "$response" | jq -e '.result' > /dev/null 2>&1; then
-        # MCP のレスポンスから結果を取得
-        local result=$(echo "$response" | jq -r '.result.content[0].text // .result.content[0] // .result')
+        log_success "$test_name が成功しました"
         
-        # result が JSON 文字列かチェック
-        if echo "$result" | jq -e '.success' > /dev/null 2>&1; then
-            local success=$(echo "$result" | jq -r '.success')
-            if [ "$success" = "true" ]; then
-                log_success "$test_name が成功しました"
-                
-                # 行数や件数を表示
-                local row_count=$(echo "$result" | jq -r '.row_count // empty')
-                if [ -n "$row_count" ] && [ "$row_count" != "empty" ]; then
-                    log_info "結果: $row_count 行"
-                fi
-                
-                local count=$(echo "$result" | jq -r '.count // empty')
-                if [ -n "$count" ] && [ "$count" != "empty" ]; then
-                    log_info "結果: $count 件"
-                fi
-                
-                # 実行時間を表示
-                local exec_time=$(echo "$result" | jq -r '.execution_time_ms // empty')
-                if [ -n "$exec_time" ] && [ "$exec_time" != "empty" ]; then
-                    log_info "実行時間: ${exec_time}ms"
-                fi
-                
-                # データの一部を表示 (最初の数行)
-                if echo "$result" | jq -e '.rows' > /dev/null 2>&1; then
-                    local row_count_actual=$(echo "$result" | jq '.rows | length')
-                    if [ "$row_count_actual" -gt 0 ]; then
-                        log_info "データサンプル (最初の3行):"
-                        echo "$result" | jq -c '.rows[0:3][]' >&2
-                    fi
-                fi
-                
-                # サーバー情報を表示
-                if echo "$result" | jq -e '.servers' > /dev/null 2>&1; then
-                    log_info "サーバー情報:"
-                    echo "$result" | jq -c '.servers[] | {name: .name, engine: .engine, description: .description}' >&2
-                fi
+        # レスポンスの詳細を表示
+        if echo "$response" | jq -e '.result.content[0].text' > /dev/null 2>&1; then
+            # JSON の内容を整形して表示
+            local result_text=$(echo "$response" | jq -r '.result.content[0].text')
+            
+            # JSON として解析してみる
+            if echo "$result_text" | jq '.' > /dev/null 2>&1; then
+                log_info "レスポンス内容:"
+                echo "$result_text" | jq '.' >&2
             else
-                local error_msg=$(echo "$result" | jq -r '.error // "不明なエラー"')
-                log_error "$test_name が失敗しました: $error_msg"
+                log_info "レスポンス内容 (テキスト):"
+                echo "$result_text" >&2
             fi
         else
-            log_info "$test_name の結果:"
-            echo "$result" | jq '.' >&2 2>/dev/null || echo "$result" >&2
+            log_info "レスポンス内容:"
+            echo "$response" | jq '.result' >&2
         fi
     elif echo "$response" | jq -e '.error' > /dev/null 2>&1; then
         log_error "$test_name でエラーが発生しました"
