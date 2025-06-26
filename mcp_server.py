@@ -8,6 +8,7 @@ import sys
 from typing import Annotated
 import yaml
 
+import logging
 import fastmcp
 from fastmcp.utilities.types import Image
 from dotenv import load_dotenv
@@ -16,6 +17,25 @@ from pydantic import Field
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
+
+
+def setup_logger():
+    log_file = '/tmp/sql-agent-mcp-server.log'
+    file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+    file_handler.setFormatter(
+        logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+    )
+
+    # ルートロガーの設定
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+    logger.handlers = [file_handler]
+    return logger
+
+
+logger = setup_logger()
 
 
 def get_config():
