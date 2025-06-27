@@ -3,13 +3,14 @@
 MySQL, Postgres に接続する MCP サーバー
 """
 
+import json
+import logging
 import os
 import sys
-from typing import Annotated
-import yaml
-import json
 from textwrap import dedent
-import logging
+from typing import Annotated
+
+import yaml
 
 # fastmcp をインポートする前にログを完全に抑制
 logging.getLogger().setLevel(logging.ERROR)
@@ -22,7 +23,6 @@ from dotenv import load_dotenv
 from pydantic import Field
 
 from sql_agent import SQLAgentManager
-
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
@@ -106,6 +106,16 @@ sql_server_name_and_description = '\n\n'.join(
     ]
 )
 
+sql_server_names = [
+    server['name'] for server in config.get('mysql_servers', [])
+]
+
+sql_server_names_mysql = [
+    server['name']
+    for server in config.get('mysql_servers', [])
+    if server.get('engine') == 'mysql'
+]
+
 
 # MCPサーバーの設定
 server = fastmcp.FastMCP(
@@ -150,7 +160,9 @@ async def list_sql_servers() -> str:
 
 @server.tool(
     name="execute_sql",
-    description="""SQL クエリを実行し、結果を JSON で返します。
+    description=f"""SQL クエリを実行し、結果を JSON で返します。
+
+利用可能な server_name: {', '.join(sql_server_names)}
 """,
 )
 async def execute_sql(
@@ -160,7 +172,7 @@ async def execute_sql(
             description=(
                 "実行する SQL サーバーの名前。 config.yaml の mysql_servers の name"
             ),
-            examples=["ytyng-blog"],
+            examples=sql_server_names,
         ),
     ] = None,
     sql: Annotated[
@@ -210,7 +222,9 @@ async def execute_sql(
 
 @server.tool(
     name="get_table_list",
-    description="""指定したサーバーのテーブル一覧を取得します。
+    description=f"""指定したサーバーのテーブル一覧を取得します。
+
+利用可能な server_name: {', '.join(sql_server_names)}
 """,
 )
 async def get_table_list(
@@ -218,7 +232,7 @@ async def get_table_list(
         str,
         Field(
             description=("テーブル一覧を取得する SQL サーバーの名前"),
-            examples=["ytyng-blog"],
+            examples=sql_server_names,
         ),
     ] = None,
 ) -> str:
@@ -251,7 +265,9 @@ async def get_table_list(
 
 @server.tool(
     name="get_table_schema",
-    description="""指定したテーブルのスキーマ情報を取得します。
+    description=f"""指定したテーブルのスキーマ情報を取得します。
+
+利用可能な server_name: {', '.join(sql_server_names)}
 """,
 )
 async def get_table_schema(
@@ -259,7 +275,7 @@ async def get_table_schema(
         str,
         Field(
             description=("スキーマを取得する SQL サーバーの名前"),
-            examples=["ytyng-blog"],
+            examples=sql_server_names,
         ),
     ] = None,
     table_name: Annotated[
@@ -306,7 +322,9 @@ async def get_table_schema(
 
 @server.tool(
     name="get_mysql_status",
-    description="""MySQL サーバーのステータス情報を取得します。
+    description=f"""MySQL サーバーのステータス情報を取得します。
+
+利用可能な server_name: {', '.join(sql_server_names_mysql)}
 """,
 )
 async def get_mysql_status(
@@ -314,7 +332,7 @@ async def get_mysql_status(
         str,
         Field(
             description="MySQL サーバーの名前",
-            examples=["mysql-server"],
+            examples=sql_server_names_mysql,
         ),
     ] = None,
 ) -> str:
@@ -343,7 +361,9 @@ async def get_mysql_status(
 
 @server.tool(
     name="get_mysql_variables",
-    description="""MySQL サーバーの変数情報を取得します。
+    description=f"""MySQL サーバーの変数情報を取得します。
+
+利用可能な server_name: {', '.join(sql_server_names_mysql)}
 """,
 )
 async def get_mysql_variables(
@@ -351,7 +371,7 @@ async def get_mysql_variables(
         str,
         Field(
             description="MySQL サーバーの名前",
-            examples=["mysql-server"],
+            examples=sql_server_names_mysql,
         ),
     ] = None,
 ) -> str:
@@ -380,7 +400,9 @@ async def get_mysql_variables(
 
 @server.tool(
     name="get_mysql_processlist",
-    description="""MySQL サーバーのプロセス一覧を取得します。
+    description=f"""MySQL サーバーのプロセス一覧を取得します。
+
+利用可能な server_name: {', '.join(sql_server_names_mysql)}
 """,
 )
 async def get_mysql_processlist(
@@ -388,7 +410,7 @@ async def get_mysql_processlist(
         str,
         Field(
             description="MySQL サーバーの名前",
-            examples=["mysql-server"],
+            examples=sql_server_names_mysql,
         ),
     ] = None,
 ) -> str:
@@ -417,7 +439,9 @@ async def get_mysql_processlist(
 
 @server.tool(
     name="get_mysql_databases",
-    description="""MySQL サーバーのデータベース一覧を取得します。
+    description=f"""MySQL サーバーのデータベース一覧を取得します。
+
+利用可能な server_name: {', '.join(sql_server_names_mysql)}
 """,
 )
 async def get_mysql_databases(
@@ -425,7 +449,7 @@ async def get_mysql_databases(
         str,
         Field(
             description="MySQL サーバーの名前",
-            examples=["mysql-server"],
+            examples=sql_server_names_mysql,
         ),
     ] = None,
 ) -> str:
@@ -454,7 +478,9 @@ async def get_mysql_databases(
 
 @server.tool(
     name="get_mysql_table_status",
-    description="""MySQL テーブルのステータス情報を取得します。
+    description=f"""MySQL テーブルのステータス情報を取得します。
+
+利用可能な server_name: {', '.join(sql_server_names_mysql)}
 """,
 )
 async def get_mysql_table_status(
@@ -462,7 +488,7 @@ async def get_mysql_table_status(
         str,
         Field(
             description="MySQL サーバーの名前",
-            examples=["mysql-server"],
+            examples=sql_server_names_mysql,
         ),
     ] = None,
     table_name: Annotated[
@@ -501,7 +527,9 @@ async def get_mysql_table_status(
 
 @server.tool(
     name="get_mysql_indexes",
-    description="""MySQL テーブルのインデックス情報を取得します。
+    description=f"""MySQL テーブルのインデックス情報を取得します。
+
+利用可能な server_name: {', '.join(sql_server_names_mysql)}
 """,
 )
 async def get_mysql_indexes(
@@ -509,7 +537,7 @@ async def get_mysql_indexes(
         str,
         Field(
             description="MySQL サーバーの名前",
-            examples=["mysql-server"],
+            examples=sql_server_names_mysql,
         ),
     ] = None,
     table_name: Annotated[
@@ -552,7 +580,9 @@ async def get_mysql_indexes(
 
 @server.tool(
     name="optimize_mysql_table",
-    description="""MySQL テーブルの最適化を実行します。
+    description=f"""MySQL テーブルの最適化を実行します。
+
+利用可能な server_name: {', '.join(sql_server_names_mysql)}
 """,
 )
 async def optimize_mysql_table(
@@ -560,7 +590,7 @@ async def optimize_mysql_table(
         str,
         Field(
             description="MySQL サーバーの名前",
-            examples=["mysql-server"],
+            examples=sql_server_names_mysql,
         ),
     ] = None,
     table_name: Annotated[
@@ -603,7 +633,9 @@ async def optimize_mysql_table(
 
 @server.tool(
     name="analyze_mysql_table",
-    description="""MySQL テーブルの分析を実行します。
+    description=f"""MySQL テーブルの分析を実行します。
+
+利用可能な server_name: {', '.join(sql_server_names_mysql)}
 """,
 )
 async def analyze_mysql_table(
@@ -611,7 +643,7 @@ async def analyze_mysql_table(
         str,
         Field(
             description="MySQL サーバーの名前",
-            examples=["mysql-server"],
+            examples=sql_server_names_mysql,
         ),
     ] = None,
     table_name: Annotated[
@@ -654,7 +686,9 @@ async def analyze_mysql_table(
 
 @server.tool(
     name="check_mysql_table",
-    description="""MySQL テーブルのチェックを実行します。
+    description=f"""MySQL テーブルのチェックを実行します。
+
+利用可能な server_name: {', '.join(sql_server_names_mysql)}
 """,
 )
 async def check_mysql_table(
@@ -662,7 +696,7 @@ async def check_mysql_table(
         str,
         Field(
             description="MySQL サーバーの名前",
-            examples=["mysql-server"],
+            examples=sql_server_names_mysql,
         ),
     ] = None,
     table_name: Annotated[
