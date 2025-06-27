@@ -8,7 +8,7 @@ import sys
 from typing import Annotated
 import yaml
 import json
-
+from textwrap import dedent
 import logging
 
 # fastmcp をインポートする前にログを完全に抑制
@@ -87,20 +87,42 @@ def get_config():
     return config
 
 
+config = get_config()
+
+
 def init_sql_agent_manager():
     """SQL Agent Manager を初期化する"""
     global sql_agent_manager
     if sql_agent_manager is None:
-        config = get_config()
         mysql_servers = config.get('mysql_servers', [])
         sql_agent_manager = SQLAgentManager(mysql_servers)
     return sql_agent_manager
 
 
+sql_server_name_and_description = '\n\n'.join(
+    [
+        f"## server_name: {server['name']}\n\n{server['description']}"
+        for server in config.get('mysql_servers', [])
+    ]
+)
+
+
 # MCPサーバーの設定
 server = fastmcp.FastMCP(
     name="sql-agent-mcp-server",
-    instructions="""MySQL と Postgres に接続する MCP サーバーです。""",
+    instructions=dedent(
+        f"""
+        MySQL と Postgres に接続する MCP サーバーです。
+        テーブルの読み取り権限のみ持ちます。Update, Insert はできません。
+        個人情報を含むテーブルや、秘密情報が含まれるテーブルは、
+        SELECT 権限を付与していないため内容を読み取ることはできませんが、
+        テーブルの構造を読むことはできます。
+
+        # SQL サーバー の名前 (server_name) と説明
+
+        {sql_server_name_and_description}
+        """
+    ),
 )
 
 
