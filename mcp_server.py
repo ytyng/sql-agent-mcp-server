@@ -10,8 +10,14 @@ import yaml
 import json
 
 import logging
+
+# fastmcp をインポートする前にログを完全に抑制
+logging.getLogger().setLevel(logging.ERROR)
+for logger_name in ['fastmcp', 'mcp', 'uvicorn', 'asyncio', 'rich']:
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
+    logging.getLogger(logger_name).disabled = True
+
 import fastmcp
-from fastmcp.utilities.types import Image
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -22,7 +28,11 @@ from sql_agent import SQLAgentManager
 load_dotenv()
 
 
-def setup_logger():
+def setup_logger_for_mcp_server():
+    """
+    MCP サーバー用にロガーを設定する
+    標準出力にログを出さないようにする
+    """
     log_file = '/tmp/sql-agent-mcp-server.log'
     file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
     file_handler.setFormatter(
@@ -32,13 +42,34 @@ def setup_logger():
     )
 
     # ルートロガーの設定
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-    logger.handlers = [file_handler]
-    return logger
+    root_logger = logging.getLogger()
+    root_logger.handlers = []  # 既存のハンドラーをクリア
+    root_logger.addHandler(file_handler)
+    root_logger.setLevel(logging.DEBUG)
+
+    # サードパーティーのロガーも設定
+    for logger_name, log_level in [
+        ('httpx', logging.WARNING),
+        ('urllib3', logging.WARNING),
+        ('asyncio', logging.WARNING),
+        ('fastmcp', logging.INFO),
+        ('FastMCP.fastmcp.server.server', logging.INFO),
+        ('mcp', logging.WARNING),
+        ('uvicorn', logging.WARNING),
+        ('rich', logging.WARNING),
+    ]:
+        _logger = logging.getLogger(logger_name)
+        _logger.handlers = []
+        _logger.addHandler(file_handler)
+        _logger.setLevel(log_level)
+        _logger.propagate = False
 
 
-logger = setup_logger()
+# MCP サーバー用のログ設定を実行
+setup_logger_for_mcp_server()
+
+# アプリケーション用のロガーを取得
+logger = logging.getLogger('sql-agent-mcp-server')
 
 # グローバルな SQL Agent Manager
 sql_agent_manager = None
@@ -83,22 +114,15 @@ async def list_sql_servers() -> str:
     try:
         manager = init_sql_agent_manager()
         servers = manager.get_server_list()
-        
-        result = {
-            'success': True,
-            'servers': servers,
-            'count': len(servers)
-        }
-        
+
+        result = {'success': True, 'servers': servers, 'count': len(servers)}
+
         logger.info(f"サーバー一覧を取得しました: {len(servers)} 個")
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
         logger.error(f"サーバー一覧取得エラー: {e}")
-        result = {
-            'success': False,
-            'error': str(e)
-        }
+        result = {'success': False, 'error': str(e)}
         return json.dumps(result, ensure_ascii=False, indent=2)
 
 
@@ -134,33 +158,30 @@ async def execute_sql(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     if not sql:
-        result = {
-            'success': False,
-            'error': 'SQL クエリが指定されていません'
-        }
+        result = {'success': False, 'error': 'SQL クエリが指定されていません'}
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         agent = manager.get_agent(server_name)
-        
+
         logger.info(f"SQL 実行開始 ({server_name}): {sql[:100]}...")
         result = agent.execute_query(sql)
-        
+
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
         logger.error(f"SQL 実行エラー ({server_name}): {e}")
         result = {
             'success': False,
             'error': str(e),
             'server_name': server_name,
-            'query': sql
+            'query': sql,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -174,9 +195,7 @@ async def get_table_list(
     server_name: Annotated[
         str,
         Field(
-            description=(
-                "テーブル一覧を取得する SQL サーバーの名前"
-            ),
+            description=("テーブル一覧を取得する SQL サーバーの名前"),
             examples=["ytyng-blog"],
         ),
     ] = None,
@@ -185,25 +204,25 @@ async def get_table_list(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         agent = manager.get_agent(server_name)
-        
+
         logger.info(f"テーブル一覧取得開始 ({server_name})")
         result = agent.get_table_list()
-        
+
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
         logger.error(f"テーブル一覧取得エラー ({server_name}): {e}")
         result = {
             'success': False,
             'error': str(e),
-            'server_name': server_name
+            'server_name': server_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -217,9 +236,7 @@ async def get_table_schema(
     server_name: Annotated[
         str,
         Field(
-            description=(
-                "スキーマを取得する SQL サーバーの名前"
-            ),
+            description=("スキーマを取得する SQL サーバーの名前"),
             examples=["ytyng-blog"],
         ),
     ] = None,
@@ -235,33 +252,32 @@ async def get_table_schema(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     if not table_name:
-        result = {
-            'success': False,
-            'error': 'table_name が指定されていません'
-        }
+        result = {'success': False, 'error': 'table_name が指定されていません'}
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         agent = manager.get_agent(server_name)
-        
+
         logger.info(f"テーブルスキーマ取得開始 ({server_name}.{table_name})")
         result = agent.get_table_schema(table_name)
-        
+
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
-        logger.error(f"テーブルスキーマ取得エラー ({server_name}.{table_name}): {e}")
+        logger.error(
+            f"テーブルスキーマ取得エラー ({server_name}.{table_name}): {e}"
+        )
         result = {
             'success': False,
             'error': str(e),
             'server_name': server_name,
-            'table_name': table_name
+            'table_name': table_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -284,21 +300,21 @@ async def get_mysql_status(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         result = manager.get_mysql_status(server_name)
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
         logger.error(f"MySQL ステータス取得エラー ({server_name}): {e}")
         result = {
             'success': False,
             'error': str(e),
-            'server_name': server_name
+            'server_name': server_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -321,21 +337,21 @@ async def get_mysql_variables(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         result = manager.get_mysql_variables(server_name)
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
         logger.error(f"MySQL 変数取得エラー ({server_name}): {e}")
         result = {
             'success': False,
             'error': str(e),
-            'server_name': server_name
+            'server_name': server_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -358,21 +374,21 @@ async def get_mysql_processlist(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         result = manager.get_mysql_processlist(server_name)
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
         logger.error(f"MySQL プロセス一覧取得エラー ({server_name}): {e}")
         result = {
             'success': False,
             'error': str(e),
-            'server_name': server_name
+            'server_name': server_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -395,21 +411,21 @@ async def get_mysql_databases(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         result = manager.get_mysql_databases(server_name)
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
         logger.error(f"MySQL データベース一覧取得エラー ({server_name}): {e}")
         result = {
             'success': False,
             'error': str(e),
-            'server_name': server_name
+            'server_name': server_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -439,22 +455,24 @@ async def get_mysql_table_status(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         result = manager.get_mysql_table_status(server_name, table_name)
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
-        logger.error(f"MySQL テーブルステータス取得エラー ({server_name}): {e}")
+        logger.error(
+            f"MySQL テーブルステータス取得エラー ({server_name}): {e}"
+        )
         result = {
             'success': False,
             'error': str(e),
             'server_name': server_name,
-            'table_name': table_name
+            'table_name': table_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -484,29 +502,28 @@ async def get_mysql_indexes(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     if not table_name:
-        result = {
-            'success': False,
-            'error': 'table_name が指定されていません'
-        }
+        result = {'success': False, 'error': 'table_name が指定されていません'}
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         result = manager.get_mysql_indexes(server_name, table_name)
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
-        logger.error(f"MySQL インデックス取得エラー ({server_name}.{table_name}): {e}")
+        logger.error(
+            f"MySQL インデックス取得エラー ({server_name}.{table_name}): {e}"
+        )
         result = {
             'success': False,
             'error': str(e),
             'server_name': server_name,
-            'table_name': table_name
+            'table_name': table_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -536,29 +553,28 @@ async def optimize_mysql_table(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     if not table_name:
-        result = {
-            'success': False,
-            'error': 'table_name が指定されていません'
-        }
+        result = {'success': False, 'error': 'table_name が指定されていません'}
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         result = manager.optimize_mysql_table(server_name, table_name)
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
-        logger.error(f"MySQL テーブル最適化エラー ({server_name}.{table_name}): {e}")
+        logger.error(
+            f"MySQL テーブル最適化エラー ({server_name}.{table_name}): {e}"
+        )
         result = {
             'success': False,
             'error': str(e),
             'server_name': server_name,
-            'table_name': table_name
+            'table_name': table_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -588,29 +604,28 @@ async def analyze_mysql_table(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     if not table_name:
-        result = {
-            'success': False,
-            'error': 'table_name が指定されていません'
-        }
+        result = {'success': False, 'error': 'table_name が指定されていません'}
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         result = manager.analyze_mysql_table(server_name, table_name)
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
-        logger.error(f"MySQL テーブル分析エラー ({server_name}.{table_name}): {e}")
+        logger.error(
+            f"MySQL テーブル分析エラー ({server_name}.{table_name}): {e}"
+        )
         result = {
             'success': False,
             'error': str(e),
             'server_name': server_name,
-            'table_name': table_name
+            'table_name': table_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -640,29 +655,28 @@ async def check_mysql_table(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません'
+            'error': 'server_name が指定されていません',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     if not table_name:
-        result = {
-            'success': False,
-            'error': 'table_name が指定されていません'
-        }
+        result = {'success': False, 'error': 'table_name が指定されていません'}
         return json.dumps(result, ensure_ascii=False, indent=2)
-    
+
     try:
         manager = init_sql_agent_manager()
         result = manager.check_mysql_table(server_name, table_name)
         return json.dumps(result, ensure_ascii=False, indent=2)
-        
+
     except Exception as e:
-        logger.error(f"MySQL テーブルチェックエラー ({server_name}.{table_name}): {e}")
+        logger.error(
+            f"MySQL テーブルチェックエラー ({server_name}.{table_name}): {e}"
+        )
         result = {
             'success': False,
             'error': str(e),
             'server_name': server_name,
-            'table_name': table_name
+            'table_name': table_name,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 

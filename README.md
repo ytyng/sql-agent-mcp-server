@@ -73,10 +73,11 @@ mysql_servers:
 ### MCP サーバーの起動
 
 ```bash
-# 仮想環境をアクティベート
-source .venv/bin/activate
+# 起動スクリプトを使用 (推奨)
+./launch-mcp-server.sh
 
-# MCP サーバーを起動
+# または直接起動
+source .venv/bin/activate
 python mcp_server.py
 ```
 
@@ -125,6 +126,29 @@ MySQL サーバーに対してのみ使用できる管理ツールです。
 - `optimize_mysql_table`: テーブルを最適化
 - `check_mysql_table`: テーブルをチェック
 - `repair_mysql_table`: テーブルを修復
+
+## テスト
+
+`test-requests/` ディレクトリに MCP サーバーのテスト用スクリプトが含まれています。
+
+### テストライブラリ
+
+- `test_mcp_lib.py`: MCP サーバーとの通信用共通ライブラリ
+- `test_list_tools.py`: 利用可能なツール一覧を取得するテスト
+- `test_mangazenkan_dev.py`: 実際のデータベースに対する SQL 実行テスト
+
+```bash
+# ツール一覧の取得テスト
+python3 test-requests/test_list_tools.py
+
+# SQL 実行テスト
+python3 test-requests/test_mangazenkan_dev.py
+```
+
+## ログ
+
+- アプリケーションログは `/tmp/sql-agent-mcp-server.log` に出力されます
+- MCP 通信ではログが標準出力に出力されないよう設定済みです
 
 ## セキュリティに関する注意
 
