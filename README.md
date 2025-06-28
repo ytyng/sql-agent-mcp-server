@@ -1,31 +1,33 @@
 # SQL Agent MCP Server
 
-MySQL と PostgreSQL に接続してクエリを実行できる MCP サーバーです。
+An MCP server that connects to MySQL and PostgreSQL databases to execute queries.
 
-## 機能
+[日本語版 README はこちら](README.ja.md)
 
-- 複数のデータベースサーバーへの接続管理
-- MySQL と PostgreSQL の両方をサポート
-- SSH トンネル経由での接続サポート
-- テーブル一覧やスキーマ情報の取得
-- SQL クエリの実行
-- MySQL 専用の管理コマンド
+## Features
 
-## インストール
+- Connection management for multiple database servers
+- Support for both MySQL and PostgreSQL
+- SSH tunnel connection support
+- Retrieve table lists and schema information
+- Execute SQL queries
+- MySQL-specific administrative commands
+
+## Installation
 
 ```bash
-# 依存関係のインストール
+# Install dependencies
 uv sync
 ```
 
-## 設定
+## Configuration
 
-`config.yaml` ファイルを作成して、接続するデータベースサーバーの情報を設定します。
+Create a `config.yaml` file to configure database server connection information.
 
 ```yaml
 mysql_servers:
   - name: my-postgres
-    description: "PostgreSQL サーバー"
+    description: "PostgreSQL server"
     engine: postgres
     host: localhost
     port: 5432
@@ -34,7 +36,7 @@ mysql_servers:
     password: password
   
   - name: my-mysql
-    description: "MySQL サーバー"
+    description: "MySQL server"
     engine: mysql
     host: localhost
     port: 3306
@@ -43,16 +45,16 @@ mysql_servers:
     password: password
 ```
 
-### SSH トンネル経由での接続
+### Connection via SSH Tunnel
 
-SSH トンネルを使ってリモートのデータベースに安全に接続できます。
+You can securely connect to remote databases using SSH tunnels.
 
 ```yaml
 mysql_servers:
   - name: remote-db
-    description: "SSH トンネル経由のリモートデータベース"
+    description: "Remote database via SSH tunnel"
     engine: postgres
-    host: localhost  # SSH トンネル経由の場合は localhost を指定
+    host: localhost  # Use localhost for SSH tunnel connections
     port: 5432
     schema: remote_db
     user: db_user
@@ -61,97 +63,109 @@ mysql_servers:
       host: ssh.example.com
       port: 22
       user: ssh_user
-      # パスワード認証の場合
+      # For password authentication
       password: ssh_password
-      # または秘密鍵認証の場合
+      # Or for private key authentication
       # private_key_path: ~/.ssh/id_rsa
-      # private_key_passphrase: key_passphrase  # パスフレーズがある場合
+      # private_key_passphrase: key_passphrase  # If passphrase is required
 ```
 
-## 使い方
+## Usage
 
-### MCP サーバーの起動
+### Starting the MCP Server
 
 ```bash
-# 起動スクリプトを使用 (推奨)
+# Using startup script (recommended)
 ./launch-mcp-server.sh
 
-# または直接起動
+# Or start directly
 source .venv/bin/activate
 python mcp_server.py
 ```
 
-### 利用可能なツール
+### Available Tools
 
 #### 1. sql_query
-SQL クエリを実行します。
+Execute SQL queries.
 
 ```
 Parameters:
-- server_name: サーバー名
-- sql: 実行する SQL クエリ
+- server_name: Server name
+- sql: SQL query to execute
 ```
 
 #### 2. get_server_list
-登録されているサーバーの一覧を取得します。
+Get a list of registered servers.
 
 #### 3. get_table_list
-指定したサーバーのテーブル一覧を取得します。
+Get a list of tables for the specified server.
 
 ```
 Parameters:
-- server_name: サーバー名
+- server_name: Server name
 ```
 
 #### 4. get_table_schema
-テーブルのスキーマ情報を取得します。
+Get schema information for a table.
 
 ```
 Parameters:
-- server_name: サーバー名
-- table_name: テーブル名
+- server_name: Server name
+- table_name: Table name
 ```
 
-### MySQL 専用ツール
+### MySQL-Specific Tools
 
-MySQL サーバーに対してのみ使用できる管理ツールです。
+Administrative tools that can only be used with MySQL servers.
 
-- `get_mysql_status`: ステータス情報を取得
-- `get_mysql_variables`: 変数情報を取得
-- `get_mysql_processlist`: プロセス一覧を取得
-- `get_mysql_databases`: データベース一覧を取得
-- `get_mysql_table_status`: テーブルステータスを取得
-- `get_mysql_indexes`: インデックス情報を取得
-- `analyze_mysql_table`: テーブルを分析
-- `optimize_mysql_table`: テーブルを最適化
-- `check_mysql_table`: テーブルをチェック
-- `repair_mysql_table`: テーブルを修復
+- `get_mysql_status`: Get status information
+- `get_mysql_variables`: Get variable information
+- `get_mysql_processlist`: Get process list
+- `get_mysql_databases`: Get database list
+- `get_mysql_table_status`: Get table status
+- `get_mysql_indexes`: Get index information
+- `analyze_mysql_table`: Analyze table
+- `optimize_mysql_table`: Optimize table
+- `check_mysql_table`: Check table
+- `repair_mysql_table`: Repair table
 
-## テスト
+## Testing
 
-`test-requests/` ディレクトリに MCP サーバーのテスト用スクリプトが含まれています。
+The `test-requests/` directory contains test scripts for the MCP server.
 
-### テストライブラリ
+### Test Library
 
-- `test_mcp_lib.py`: MCP サーバーとの通信用共通ライブラリ
-- `test_list_tools.py`: 利用可能なツール一覧を取得するテスト
-- `test_mangazenkan_dev.py`: 実際のデータベースに対する SQL 実行テスト
+- `test_mcp_lib.py`: Common library for communicating with MCP server
+- `test_list_tools.py`: Test to get list of available tools
+- `test_mangazenkan_dev.py`: Test for SQL execution against actual database
 
 ```bash
-# ツール一覧の取得テスト
+# Test to get tool list
 python3 test-requests/test_list_tools.py
 
-# SQL 実行テスト
+# SQL execution test
 python3 test-requests/test_mangazenkan_dev.py
 ```
 
-## ログ
+## Logging
 
-- アプリケーションログは `/tmp/sql-agent-mcp-server.log` に出力されます
-- MCP 通信ではログが標準出力に出力されないよう設定済みです
+- Application logs are output to `/tmp/sql-agent-mcp-server.log`
+- Configured to prevent logs from being output to stdout for MCP communication
 
-## セキュリティに関する注意
+## Security Considerations
 
-- `config.yaml` にはデータベースのパスワードが含まれるため、適切に管理してください
-- SSH 秘密鍵を使用する場合は、適切なファイルパーミッションを設定してください
-- 本番環境では環境変数や秘密管理ツールの使用を検討してください
+- `config.yaml` contains database passwords, so manage it appropriately
+- When using SSH private keys, set appropriate file permissions
+- Consider using environment variables or secret management tools in production environments
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request

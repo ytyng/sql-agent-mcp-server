@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SQL Agent - SQL 接続とクエリ実行を管理するコアクラス
+SQL Agent - Core class for managing SQL connections and query execution
 """
 
 import json
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class SQLAgent:
-    """SQL データベースへの接続とクエリ実行を管理するクラス"""
+    """Class for managing SQL database connections and query execution"""
     
     def __init__(self, config: Dict[str, Any]):
         """
@@ -68,7 +68,7 @@ class SQLAgent:
                     cursorclass=pymysql.cursors.DictCursor
                 )
             else:
-                raise ValueError(f"サポートされていないエンジン: {self.config['engine']}")
+                raise ValueError(f"Unsupported engine: {self.config['engine']}")
                 
             logger.info(f"データベースに接続しました: {self.config['name']}")
             
@@ -199,7 +199,7 @@ class SQLAgent:
                 ORDER BY table_name
             """
         else:
-            raise ValueError(f"サポートされていないエンジン: {self.config['engine']}")
+            raise ValueError(f"Unsupported engine: {self.config['engine']}")
         
         return self.execute_query(sql)
     
@@ -228,7 +228,7 @@ class SQLAgent:
                 ORDER BY ordinal_position
             """
         else:
-            raise ValueError(f"サポートされていないエンジン: {self.config['engine']}")
+            raise ValueError(f"Unsupported engine: {self.config['engine']}")
         
         return self.execute_query(sql)
     
@@ -261,7 +261,7 @@ class SQLAgent:
             # パスワード認証
             ssh_params['ssh_password'] = ssh_config['password']
         else:
-            raise ValueError("SSH 認証情報が設定されていません")
+            raise ValueError("SSH authentication information is not configured")
         
         # SSH トンネルを作成
         self.ssh_tunnel = SSHTunnelForwarder(**ssh_params)
@@ -299,7 +299,7 @@ class SQLAgentManager:
             SQL Agent インスタンス
         """
         if server_name not in self.agents:
-            raise ValueError(f"サーバーが見つかりません: {server_name}")
+            raise ValueError(f"Server not found: {server_name}")
         
         return self.agents[server_name]
     
@@ -335,7 +335,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = "SHOW STATUS"
         return agent.execute_query(sql)
@@ -352,7 +352,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = "SHOW VARIABLES"
         return agent.execute_query(sql)
@@ -369,7 +369,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = "SHOW PROCESSLIST"
         return agent.execute_query(sql)
@@ -386,7 +386,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = "SHOW DATABASES"
         return agent.execute_query(sql)
@@ -404,7 +404,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         if table_name:
             sql = f"SHOW TABLE STATUS LIKE '{table_name}'"
@@ -426,7 +426,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = f"SHOW INDEX FROM {table_name}"
         return agent.execute_query(sql)
@@ -443,7 +443,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = "SHOW ENGINES"
         return agent.execute_query(sql)
@@ -460,7 +460,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = "SHOW BINARY LOGS"
         return agent.execute_query(sql)
@@ -477,7 +477,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = "SHOW MASTER STATUS"
         return agent.execute_query(sql)
@@ -494,7 +494,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = "SHOW SLAVE STATUS"
         return agent.execute_query(sql)
@@ -512,7 +512,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = f"ANALYZE TABLE {table_name}"
         return agent.execute_query(sql)
@@ -530,7 +530,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = f"OPTIMIZE TABLE {table_name}"
         return agent.execute_query(sql)
@@ -548,7 +548,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = f"CHECK TABLE {table_name}"
         return agent.execute_query(sql)
@@ -566,7 +566,7 @@ class SQLAgentManager:
         """
         agent = self.get_agent(server_name)
         if agent.config['engine'] != 'mysql':
-            raise ValueError(f"MySQL 以外のサーバーです: {server_name}")
+            raise ValueError(f"Not a MySQL server: {server_name}")
         
         sql = f"REPAIR TABLE {table_name}"
         return agent.execute_query(sql)

@@ -1,64 +1,64 @@
-# SQL Agent MCP Server - Claude 用ドキュメント
+# SQL Agent MCP Server - Claude Documentation
 
-MySQL と PostgreSQL に接続してクエリを実行できる MCP サーバーです。
+An MCP server that connects to MySQL and PostgreSQL databases to execute queries.
 
-## プロジェクト概要
+## Project Overview
 
-このプロジェクトは Model Context Protocol (MCP) を使用して、複数のデータベース (MySQL/PostgreSQL) に対して SQL クエリを実行できるサーバーを提供します。
+This project provides a server that can execute SQL queries against multiple databases (MySQL/PostgreSQL) using the Model Context Protocol (MCP).
 
-### 主な機能
+### Key Features
 
-- 複数データベースサーバーへの接続管理
-- SSH トンネル経由での安全な接続
-- テーブル一覧・スキーマ情報の取得
-- SQL クエリの実行
-- MySQL 専用管理コマンド
+- Connection management for multiple database servers
+- Secure connections via SSH tunnels
+- Retrieval of table lists and schema information
+- SQL query execution
+- MySQL-specific administrative commands
 
-## 開発環境
+## Development Environment
 
 - Python 3.11+
-- uv パッケージマネージャー
-- FastMCP フレームワーク
+- uv package manager
+- FastMCP framework
 
-## 重要なファイル
+## Important Files
 
-- `mcp_server.py`: MCP サーバーのメイン実装
-- `sql_agent.py`: データベース接続とクエリ実行のロジック
-- `config.yaml`: データベース接続設定
-- `launch-mcp-server.sh`: サーバー起動スクリプト
-- `test-requests/`: テスト用スクリプト一式
+- `mcp_server.py`: Main implementation of the MCP server
+- `sql_agent.py`: Database connection and query execution logic
+- `config.yaml`: Database connection configuration
+- `launch-mcp-server.sh`: Server startup script
+- `test-requests/`: Test script suite
 
-## テスト方法
+## Testing
 
 ```bash
-# 仮想環境とサーバーの起動確認
+# Verify virtual environment and server startup
 ./launch-mcp-server.sh
 
-# ツール一覧の取得テスト
+# Test tool list retrieval
 python3 test-requests/test_list_tools.py
 
-# 実際の SQL 実行テスト
+# Test actual SQL execution
 python3 test-requests/test_mangazenkan_dev.py
 ```
 
-## ログ設定について
+## Logging Configuration
 
-MCP 通信では JSON-RPC の標準入出力を使用するため、ログが標準出力に出力されると通信が阻害されます。
-このプロジェクトでは以下の対策を実装しています：
+Since MCP communication uses JSON-RPC standard input/output, logs output to stdout would interfere with communication.
+This project implements the following measures:
 
-- `setup_logger_for_mcp_server()` 関数でログハンドラーをファイル出力のみに設定
-- FastMCP および関連ライブラリのログレベルを調整
-- アプリケーションログは `/tmp/sql-agent-mcp-server.log` に出力
+- Configure log handlers to file output only with the `setup_logger_for_mcp_server()` function
+- Adjust log levels for FastMCP and related libraries
+- Application logs are output to `/tmp/sql-agent-mcp-server.log`
 
-## 開発時の注意点
+## Development Notes
 
-- 新しい依存関係を追加する場合は `uv add` を使用
-- データベース接続情報は `config.yaml` で管理
-- SSH トンネル機能は `test_ssh_tunnel.py` でテスト可能
-- ログ設定を変更する場合は MCP 通信への影響を考慮する
+- Use `uv add` when adding new dependencies
+- Manage database connection information with `config.yaml`
+- SSH tunnel functionality can be tested with `test_ssh_tunnel.py`
+- Consider the impact on MCP communication when changing log settings
 
-## セキュリティ
+## Security
 
-- パスワードや秘密鍵は適切に管理
-- SSH トンネル経由での安全な接続をサポート
-- SQL インジェクション対策は sql_agent 側で実装済み
+- Properly manage passwords and private keys
+- Support secure connections via SSH tunnels
+- SQL injection countermeasures are implemented on the sql_agent side

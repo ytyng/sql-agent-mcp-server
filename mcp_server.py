@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MySQL, Postgres に接続する MCP サーバー
+MCP server for connecting to MySQL and PostgreSQL databases
 """
 
 import json
@@ -12,7 +12,7 @@ from typing import Annotated
 
 import yaml
 
-# fastmcp をインポートする前にログを完全に抑制
+# Completely suppress logs before importing fastmcp
 logging.getLogger().setLevel(logging.ERROR)
 for logger_name in ['fastmcp', 'mcp', 'uvicorn', 'asyncio', 'rich']:
     logging.getLogger(logger_name).setLevel(logging.ERROR)
@@ -24,14 +24,14 @@ from pydantic import Field
 
 from sql_agent import SQLAgentManager
 
-# .envファイルから環境変数を読み込む
+# Load environment variables from .env file
 load_dotenv()
 
 
 def setup_logger_for_mcp_server():
     """
-    MCP サーバー用にロガーを設定する
-    標準出力にログを出さないようにする
+    Configure logger for MCP server
+    Prevent logs from being output to stdout
     """
     log_file = '/tmp/sql-agent-mcp-server.log'
     file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
@@ -41,13 +41,13 @@ def setup_logger_for_mcp_server():
         )
     )
 
-    # ルートロガーの設定
+    # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.handlers = []  # 既存のハンドラーをクリア
+    root_logger.handlers = []  # Clear existing handlers
     root_logger.addHandler(file_handler)
     root_logger.setLevel(logging.DEBUG)
 
-    # サードパーティーのロガーも設定
+    # Configure third-party loggers
     for logger_name, log_level in [
         ('httpx', logging.WARNING),
         ('urllib3', logging.WARNING),
@@ -65,13 +65,13 @@ def setup_logger_for_mcp_server():
         _logger.propagate = False
 
 
-# MCP サーバー用のログ設定を実行
+# Execute log configuration for MCP server
 setup_logger_for_mcp_server()
 
-# アプリケーション用のロガーを取得
+# Get logger for application
 logger = logging.getLogger('sql-agent-mcp-server')
 
-# グローバルな SQL Agent Manager
+# Global SQL Agent Manager
 sql_agent_manager = None
 
 
@@ -192,12 +192,12 @@ async def execute_sql(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     if not sql:
-        result = {'success': False, 'error': 'SQL クエリが指定されていません'}
+        result = {'success': False, 'error': 'SQL query is not specified'}
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     try:
@@ -240,7 +240,7 @@ async def get_table_list(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -290,12 +290,12 @@ async def get_table_schema(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     if not table_name:
-        result = {'success': False, 'error': 'table_name が指定されていません'}
+        result = {'success': False, 'error': 'table_name is not specified'}
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     try:
@@ -340,7 +340,7 @@ async def get_mysql_status(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -379,7 +379,7 @@ async def get_mysql_variables(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -418,7 +418,7 @@ async def get_mysql_processlist(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -457,7 +457,7 @@ async def get_mysql_databases(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -503,7 +503,7 @@ async def get_mysql_table_status(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -552,12 +552,12 @@ async def get_mysql_indexes(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     if not table_name:
-        result = {'success': False, 'error': 'table_name が指定されていません'}
+        result = {'success': False, 'error': 'table_name is not specified'}
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     try:
@@ -605,12 +605,12 @@ async def optimize_mysql_table(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     if not table_name:
-        result = {'success': False, 'error': 'table_name が指定されていません'}
+        result = {'success': False, 'error': 'table_name is not specified'}
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     try:
@@ -658,12 +658,12 @@ async def analyze_mysql_table(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     if not table_name:
-        result = {'success': False, 'error': 'table_name が指定されていません'}
+        result = {'success': False, 'error': 'table_name is not specified'}
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     try:
@@ -711,12 +711,12 @@ async def check_mysql_table(
     if not server_name:
         result = {
             'success': False,
-            'error': 'server_name が指定されていません',
+            'error': 'server_name is not specified',
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     if not table_name:
-        result = {'success': False, 'error': 'table_name が指定されていません'}
+        result = {'success': False, 'error': 'table_name is not specified'}
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     try:
