@@ -4,7 +4,6 @@ SQL Agent - Core class for managing SQL connections and query execution
 """
 
 import decimal
-import logging
 import os
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -16,7 +15,7 @@ import pymysql
 import pymysql.cursors
 from sshtunnel import SSHTunnelForwarder
 
-logger = logging.getLogger(__name__)
+from logging_config import logger
 
 
 class SQLAgent:

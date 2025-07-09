@@ -4,72 +4,22 @@ MCP server for connecting to MySQL and PostgreSQL databases
 """
 
 import json
-import logging
 import os
 import sys
 from textwrap import dedent
 from typing import Annotated
 
-import yaml
-
-# Completely suppress logs before importing fastmcp
-logging.getLogger().setLevel(logging.ERROR)
-for logger_name in ['fastmcp', 'mcp', 'uvicorn', 'asyncio', 'rich']:
-    logging.getLogger(logger_name).setLevel(logging.ERROR)
-    logging.getLogger(logger_name).disabled = True
-
 import fastmcp
+import yaml
 from dotenv import load_dotenv
 from pydantic import Field
 
+from logging_config import logger
 from sql_agent import SQLAgentManager
 
 # Load environment variables from .env file
 load_dotenv()
 
-
-def setup_logger_for_mcp_server():
-    """
-    Configure logger for MCP server
-    Prevent logs from being output to stdout
-    """
-    log_file = '/tmp/sql-agent-mcp-server.log'
-    file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
-    file_handler.setFormatter(
-        logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-    )
-
-    # Configure root logger
-    root_logger = logging.getLogger()
-    root_logger.handlers = []  # Clear existing handlers
-    root_logger.addHandler(file_handler)
-    root_logger.setLevel(logging.DEBUG)
-
-    # Configure third-party loggers
-    for logger_name, log_level in [
-        ('httpx', logging.WARNING),
-        ('urllib3', logging.WARNING),
-        ('asyncio', logging.WARNING),
-        ('fastmcp', logging.INFO),
-        ('FastMCP.fastmcp.server.server', logging.INFO),
-        ('mcp', logging.WARNING),
-        ('uvicorn', logging.WARNING),
-        ('rich', logging.WARNING),
-    ]:
-        _logger = logging.getLogger(logger_name)
-        _logger.handlers = []
-        _logger.addHandler(file_handler)
-        _logger.setLevel(log_level)
-        _logger.propagate = False
-
-
-# Execute log configuration for MCP server
-setup_logger_for_mcp_server()
-
-# Get logger for application
-logger = logging.getLogger('sql-agent-mcp-server')
 
 # Global SQL Agent Manager
 sql_agent_manager = None
