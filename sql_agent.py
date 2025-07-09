@@ -107,13 +107,15 @@ class SQLAgent:
         if not self.connection:
             self.connect()
 
+        logger.info(f"クエリ実行開始 ({self.config['name']}): {sql}")
+
         try:
             with self.connection.cursor() as cursor:
                 start_time = datetime.now()
                 cursor.execute(sql)
 
-                # SELECT 文の場合は結果を取得
-                if sql.strip().upper().startswith('SELECT'):
+                # 結果を取得できるクエリかどうかをチェック
+                try:
                     rows = cursor.fetchall()
                     # 結果を JSON シリアライズ可能な形式に変換
                     serializable_rows = self._make_serializable(rows)
@@ -129,8 +131,18 @@ class SQLAgent:
                         * 1000,
                         'server_name': self.config['name'],
                     }
-                else:
-                    # INSERT, UPDATE, DELETE などの場合
+                    logger.info(
+                        f"クエリ実行成功 ({self.config['name']}): {len(rows)} 行取得"
+                    )
+                except (
+                    psycopg2.ProgrammingError,
+                    pymysql.err.ProgrammingError,
+                ) as e:
+                    # 結果がないため fetchall が失敗する場合 (INSERT, UPDATE, DELETE など)
+                    logger.info(
+                        f"クエリ実行成功だが fetchall に失敗: {self.config['name']}, "
+                        f"{e.__class__.__name__}: {e}"
+                    )
                     self.connection.commit()
                     affected_rows = cursor.rowcount
 
@@ -151,11 +163,13 @@ class SQLAgent:
                 return result
 
         except Exception as e:
-            logger.error(f"クエリ実行エラー ({self.config['name']}): {e}")
+            logger.error(
+                f"クエリ実行エラー ({self.config['name']}): {e.__class__.__name__}: {e}"
+            )
             result = {
                 'success': False,
                 'query': sql,
-                'error': str(e),
+                'error': f'{e.__class__.__name__}: {e}',
                 'server_name': self.config['name'],
             }
             return result
@@ -188,61 +202,6 @@ class SQLAgent:
                 return data.hex()
         else:
             return data
-
-    def get_table_list(self) -> Dict[str, Any]:
-        """
-        データベース内のテーブル一覧を取得する
-
-        Returns:
-            テーブル一覧を含む辞書
-        """
-        if self.config['engine'] == 'postgres':
-            sql = """
-                SELECT table_name, table_type
-                FROM information_schema.tables
-                WHERE table_schema = 'public'
-                ORDER BY table_name
-            """
-        elif self.config['engine'] == 'mysql':
-            sql = f"""
-                SELECT table_name, table_type
-                FROM information_schema.tables
-                WHERE table_schema = '{self.config['schema']}'
-                ORDER BY table_name
-            """
-        else:
-            raise ValueError(f"Unsupported engine: {self.config['engine']}")
-
-        return self.execute_query(sql)
-
-    def get_table_schema(self, table_name: str) -> Dict[str, Any]:
-        """
-        指定したテーブルのスキーマ情報を取得する
-
-        Args:
-            table_name: テーブル名
-
-        Returns:
-            スキーマ情報を含む辞書
-        """
-        if self.config['engine'] == 'postgres':
-            sql = f"""
-                SELECT column_name, data_type, is_nullable, column_default
-                FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = '{table_name}'
-                ORDER BY ordinal_position
-            """
-        elif self.config['engine'] == 'mysql':
-            sql = f"""
-                SELECT column_name, data_type, is_nullable, column_default
-                FROM information_schema.columns
-                WHERE table_schema = '{self.config['schema']}' AND table_name = '{table_name}'
-                ORDER BY ordinal_position
-            """
-        else:
-            raise ValueError(f"Unsupported engine: {self.config['engine']}")
-
-        return self.execute_query(sql)
 
     def __enter__(self):
         """コンテキストマネージャーの開始"""
