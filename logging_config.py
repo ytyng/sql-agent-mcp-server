@@ -1,17 +1,7 @@
 import logging
+import os
 
-# ファイルハンドラーの設定
-log_file = '/tmp/sql-agent-mcp-server.log'
-file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
-file_handler.setFormatter(
-    logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-)
-
-# ルートロガーの設定
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
-
-logger_set_up = False
+_logger_initialized = False
 
 
 def setup_logger_for_mcp_server():
@@ -19,12 +9,14 @@ def setup_logger_for_mcp_server():
     Configure logger for MCP server
     Prevent logs from being output to stdout
     """
-    global logger_set_up
-    if logger_set_up:
+    global _logger_initialized
+    if _logger_initialized:
         return
 
-    logger_set_up = True
-    log_file = '/tmp/sql-agent-mcp-server.log'
+    _logger_initialized = True
+    log_file = os.environ.get(
+        'SQL_AGENT_LOG_FILE_PATH', '/tmp/sql-agent-mcp-server.log'
+    )
     file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
     file_handler.setFormatter(
         logging.Formatter(
@@ -32,11 +24,11 @@ def setup_logger_for_mcp_server():
         )
     )
 
-    # # Configure root logger
-    # root_logger = logging.getLogger()
-    # root_logger.handlers = []  # Clear existing handlers
-    # root_logger.addHandler(file_handler)
-    # root_logger.setLevel(logging.DEBUG)
+    # Configure root logger - これが一番重要！
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()  # 既存の handler をクリア
+    root_logger.addHandler(file_handler)
+    root_logger.setLevel(logging.DEBUG)
 
     # Configure third-party loggers
     for logger_name, log_level in [
@@ -50,7 +42,7 @@ def setup_logger_for_mcp_server():
         ('rich', logging.WARNING),
     ]:
         _logger = logging.getLogger(logger_name)
-        _logger.handlers = []
+        _logger.handlers.clear()
         _logger.addHandler(file_handler)
         _logger.setLevel(log_level)
         _logger.propagate = False
@@ -58,3 +50,6 @@ def setup_logger_for_mcp_server():
 
 # Execute log configuration for MCP server
 setup_logger_for_mcp_server()
+
+# メインロガー
+logger = logging.getLogger('sql_agent')
