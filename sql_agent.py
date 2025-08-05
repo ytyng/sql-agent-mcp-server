@@ -28,19 +28,19 @@ class SQLAgent:
         """
         self.config = config
         self.connection = None
-        self.ssh_tunnel = None
 
-    def connect(self) -> None:
-        """データベースに接続する"""
+    def connect(self, ssh_tunnel: SSHTunnelForwarder = None) -> None:
+        """
+        データベースに接続する
+
+        Args:
+            ssh_tunnel: 使用する SSH トンネル (SSH トンネル経由の場合)
+        """
         try:
-            # SSH トンネルの設定がある場合は先にトンネルを作成
-            if 'ssh_tunnel' in self.config:
-                self._create_ssh_tunnel()
-
             # SSH トンネル経由の場合はローカルホストとポートを使用
-            if self.ssh_tunnel:
+            if ssh_tunnel:
                 db_host = '127.0.0.1'
-                db_port = self.ssh_tunnel.local_bind_port
+                db_port = ssh_tunnel.local_bind_port
             else:
                 db_host = self.config['host']
                 db_port = self.config['port']
@@ -75,10 +75,6 @@ class SQLAgent:
             logger.error(
                 f"データベース接続エラー ({self.config['name']}): {e}"
             )
-            # エラー時は SSH トンネルも閉じる
-            if self.ssh_tunnel:
-                self.ssh_tunnel.stop()
-                self.ssh_tunnel = None
             raise
 
     def disconnect(self) -> None:
@@ -88,15 +84,10 @@ class SQLAgent:
             self.connection = None
             logger.info(f"データベースから切断しました: {self.config['name']}")
 
-        # SSH トンネルがある場合は閉じる
-        if self.ssh_tunnel:
-            self.ssh_tunnel.stop()
-            self.ssh_tunnel = None
-            logger.info(f"SSH トンネルを閉じました: {self.config['name']}")
-
     def execute_query(self, sql: str) -> Dict[str, Any]:
         """
         SQL クエリを実行する
+        SSH トンネルが設定されている場合は、クエリ実行毎にトンネルを作成・クローズする
 
         Args:
             sql: 実行する SQL クエリ
@@ -104,12 +95,18 @@ class SQLAgent:
         Returns:
             クエリ結果を含む辞書
         """
-        if not self.connection:
-            self.connect()
-
-        logger.info(f"クエリ実行開始 ({self.config['name']}): {sql}")
+        ssh_tunnel = None
 
         try:
+            # SSH トンネルが必要な場合は作成
+            if 'ssh_tunnel' in self.config:
+                ssh_tunnel = self._create_ssh_tunnel()
+
+            # データベースに接続
+            self.connect(ssh_tunnel)
+
+            logger.info(f"クエリ実行開始 ({self.config['name']}): {sql}")
+
             with self.connection.cursor() as cursor:
                 start_time = datetime.now()
                 cursor.execute(sql)
@@ -174,6 +171,15 @@ class SQLAgent:
             }
             return result
 
+        finally:
+            # 接続を閉じる
+            self.disconnect()
+
+            # SSH トンネルを閉じる
+            if ssh_tunnel:
+                ssh_tunnel.stop()
+                logger.info(f"SSH トンネルを閉じました: {self.config['name']}")
+
     def _make_serializable(self, data: Any) -> Any:
         """
         データを JSON シリアライズ可能な形式に変換する
@@ -203,13 +209,51 @@ class SQLAgent:
         else:
             return data
 
+    @contextmanager
+    def connection_context(self):
+        """
+        データベース接続のコンテキストマネージャー
+        SSH トンネルが設定されている場合は自動的に管理する
+        """
+        ssh_tunnel = None
+
+        try:
+            # SSH トンネルが必要な場合は作成
+            if 'ssh_tunnel' in self.config:
+                ssh_tunnel = self._create_ssh_tunnel()
+
+            # データベースに接続
+            self.connect(ssh_tunnel)
+            yield self
+
+        finally:
+            # 接続を閉じる
+            self.disconnect()
+
+            # SSH トンネルを閉じる
+            if ssh_tunnel:
+                ssh_tunnel.stop()
+                logger.info(f"SSH トンネルを閉じました: {self.config['name']}")
+
     def __enter__(self):
-        """コンテキストマネージャーの開始"""
+        """
+        レガシー対応のコンテキストマネージャーの開始
+        SSH トンネルが設定されている場合は connection_context() を使用することを推奨
+        """
+        if 'ssh_tunnel' in self.config:
+            logger.warning(
+                f"SSH トンネルが設定されているため connection_context() の使用を推奨します: {self.config['name']}"
+            )
         self.connect()
         return self
 
-    def _create_ssh_tunnel(self) -> None:
-        """SSH トンネルを作成する"""
+    def _create_ssh_tunnel(self) -> SSHTunnelForwarder:
+        """
+        SSH トンネルを作成する
+
+        Returns:
+            SSH トンネルインスタンス
+        """
         ssh_config = self.config['ssh_tunnel']
 
         # SSH 接続パラメータを設定
@@ -236,19 +280,19 @@ class SQLAgent:
         elif 'password' in ssh_config:
             # パスワード認証
             ssh_params['ssh_password'] = ssh_config['password']
-        else:
-            raise ValueError(
-                "SSH authentication information is not configured"
-            )
+        # 認証情報が明示的に設定されていない場合はデフォルトの SSH キー認証を使用
+        # SSHTunnelForwarder はデフォルトで ~/.ssh/id_rsa を使用する
 
-        # SSH トンネルを作成
-        self.ssh_tunnel = SSHTunnelForwarder(**ssh_params)
-        self.ssh_tunnel.start()
+        # SSH トンネルを作成して開始
+        ssh_tunnel = SSHTunnelForwarder(**ssh_params)
+        ssh_tunnel.start()
 
         logger.info(
             f"SSH トンネルを確立しました: {ssh_config['host']}:{ssh_config.get('port', 22)} -> "
             f"{self.config['host']}:{self.config['port']}"
         )
+
+        return ssh_tunnel
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """コンテキストマネージャーの終了"""
