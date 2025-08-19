@@ -309,13 +309,15 @@ class SQLAgentManager:
         """
         self.servers_config = servers_config
         self.agents = {}
-
-        for server_config in servers_config:
-            self.agents[server_config['name']] = SQLAgent(server_config)
+        # サーバー名からサーバー設定を取得するための辞書を作成
+        self.server_configs = {
+            config['name']: config for config in servers_config
+        }
 
     def get_agent(self, server_name: str) -> SQLAgent:
         """
         指定したサーバー名の SQL Agent を取得する
+        SQLAgent が存在しない場合は遅延生成する
 
         Args:
             server_name: サーバー名
@@ -323,8 +325,15 @@ class SQLAgentManager:
         Returns:
             SQL Agent インスタンス
         """
-        if server_name not in self.agents:
+        if server_name not in self.server_configs:
             raise ValueError(f"Server not found: {server_name}")
+
+        # SQLAgent が未作成の場合は遅延生成
+        if server_name not in self.agents:
+            self.agents[server_name] = SQLAgent(
+                self.server_configs[server_name]
+            )
+            logger.info(f"SQLAgent を遅延生成しました: {server_name}")
 
         return self.agents[server_name]
 

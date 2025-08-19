@@ -7,5 +7,5 @@ cd $(dirname $0)/../
     echo '{"jsonrpc": "2.0", "method": "notifications/initialized"}'
     sleep 1
     echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}'
-    sleep1
-} | ./launch-mcp-server.sh
+    sleep 1
+} | ./launch-mcp-server.sh | jq
