@@ -1,5 +1,7 @@
 # SQL Agent MCP Server
 
+![](./documents/images/featured-image.png)
+
 An MCP server that connects to MySQL and PostgreSQL databases to execute queries.
 
 [日本語版 README はこちら](README.ja.md)
@@ -34,7 +36,7 @@ mysql_servers:
     schema: mydb
     user: postgres
     password: password
-  
+
   - name: my-mysql
     description: "MySQL server"
     engine: mysql
