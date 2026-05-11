@@ -19,8 +19,11 @@ from sshtunnel import SSHTunnelForwarder
 from logging_config import logger
 
 # SQL の文字列リテラル '...' を ログ出力時にマスクする正規表現。
-# '' のエスケープを含む単一引用符列に対応。
-_SQL_STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
+# 単一引用符の中身は次の 3 通りを許容:
+#   1. ' でも \ でもない普通の文字
+#   2. \. (バックスラッシュエスケープ; MySQL デフォルト)
+#   3. '' (二重シングルクォートでのエスケープ; PostgreSQL / 標準 SQL)
+_SQL_STRING_LITERAL_RE = re.compile(r"'(?:[^'\\]|\\.|'')*'")
 
 
 def mask_sql_for_log(sql: str) -> str:
@@ -133,7 +136,8 @@ class SQLAgent:
                     # RETURNING を使う INSERT/UPDATE/DELETE は fetchall に成功し、
                     # この分岐に入る。autocommit=False のため明示 commit しないと
                     # disconnect 時にロールバックされて変更が消える。
-                    # SELECT に対しては commit() は no-op なので無条件で呼ぶ。
+                    # SELECT に対しても commit() は安全 (進行中の暗黙トランザクションを
+                    # 終わらせるだけで、変更が無いので副作用は無い) なので無条件で呼ぶ。
                     self.connection.commit()
 
                     result = {

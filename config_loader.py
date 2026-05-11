@@ -39,4 +39,10 @@ def load_config(config_filename: str = 'config.yaml') -> dict[str, Any]:
     if not data:
         raise ValueError(f"Config is empty: {source}")
 
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"Config must be a YAML mapping, got {type(data).__name__}:"
+            f" {source}"
+        )
+
     return data

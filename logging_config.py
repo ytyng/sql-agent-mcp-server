@@ -41,10 +41,20 @@ def setup_logger_for_mcp_server(log_file_path: str | None = None) -> None:
         )
     )
 
+    def _replace_handlers(target_logger: logging.Logger) -> None:
+        # ファイルディスクリプタを残さないために古いハンドラを close してから外す
+        # (特に Windows でファイルロック競合を避けるため)。
+        for old_handler in list(target_logger.handlers):
+            try:
+                old_handler.close()
+            except Exception:
+                pass
+        target_logger.handlers.clear()
+        target_logger.addHandler(file_handler)
+
     # Configure root logger - これが一番重要！
     root_logger = logging.getLogger()
-    root_logger.handlers.clear()
-    root_logger.addHandler(file_handler)
+    _replace_handlers(root_logger)
     root_logger.setLevel(logging.DEBUG)
 
     # Configure third-party loggers
@@ -59,8 +69,7 @@ def setup_logger_for_mcp_server(log_file_path: str | None = None) -> None:
         ('rich', logging.WARNING),
     ]:
         _logger = logging.getLogger(logger_name)
-        _logger.handlers.clear()
-        _logger.addHandler(file_handler)
+        _replace_handlers(_logger)
         _logger.setLevel(log_level)
         _logger.propagate = False
 

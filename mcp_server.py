@@ -15,26 +15,13 @@ from config_loader import load_config
 from logging_config import logger, setup_logger_for_mcp_server
 from sql_agent import SQLAgentManager
 
-# 遅延初期化: main() で確定する。
-_config: dict | None = None
-_sql_agent_manager: SQLAgentManager | None = None
-
-
-def _get_manager() -> SQLAgentManager:
-    """SQL Agent Manager を遅延生成して取得する"""
-    global _sql_agent_manager
-    if _sql_agent_manager is None:
-        if _config is None:
-            raise RuntimeError(
-                "Config not loaded. main() を呼ぶ前に _get_manager() が"
-                " 呼ばれた可能性があります。"
-            )
-        _sql_agent_manager = SQLAgentManager(_config.get('sql_servers', []))
-    return _sql_agent_manager
-
 
 def build_server(config: dict) -> fastmcp.FastMCP:
-    """config から FastMCP サーバーインスタンスを構築してツールを登録する"""
+    """config から FastMCP サーバーインスタンスを構築してツールを登録する。
+
+    SQLAgentManager もここで作り、ツールハンドラからクロージャー越しに参照する。
+    モジュールグローバルを介さないので、テストやマルチ起動でも独立に動く。
+    """
     sql_servers = config.get('sql_servers', [])
     sql_server_names = [server['name'] for server in sql_servers]
     sql_server_name_and_description = '\n\n'.join(
@@ -44,6 +31,8 @@ def build_server(config: dict) -> fastmcp.FastMCP:
             for server in sql_servers
         ]
     )
+
+    manager = SQLAgentManager(sql_servers)
 
     server = fastmcp.FastMCP(
         name="sql-agent-mcp-server",
@@ -69,7 +58,6 @@ def build_server(config: dict) -> fastmcp.FastMCP:
     )
     async def list_sql_servers() -> str:
         try:
-            manager = _get_manager()
             servers = manager.get_server_list()
             result = {
                 'success': True,
@@ -128,7 +116,6 @@ def build_server(config: dict) -> fastmcp.FastMCP:
             return json.dumps(result, ensure_ascii=False, indent=2)
 
         try:
-            manager = _get_manager()
             agent = manager.get_agent(server_name)
 
             logger.info(f"SQL 実行開始 ({server_name})")
@@ -151,14 +138,13 @@ def build_server(config: dict) -> fastmcp.FastMCP:
 
 def main() -> None:
     """メイン関数: MCPサーバーを起動します"""
-    global _config
 
     # 起動エラーもログに残るよう、デフォルトパス (or 環境変数) で先にロガーを
     # 初期化する。
     setup_logger_for_mcp_server()
 
     try:
-        _config = load_config()
+        config = load_config()
     except Exception as e:
         error_msg = f"❌ エラー: 設定の読み込みに失敗しました: {e}"
         logger.error(error_msg)
@@ -166,17 +152,16 @@ def main() -> None:
         sys.exit(1)
 
     # config に log_file_path があれば再設定 (パスが違えば差し替え)
-    if _config.get('log_file_path'):
-        setup_logger_for_mcp_server(_config['log_file_path'])
+    if config.get('log_file_path'):
+        setup_logger_for_mcp_server(config['log_file_path'])
 
     logger.info("MCP サーバー起動中...")
 
     try:
-        server = build_server(_config)
-        _get_manager()
+        server = build_server(config)
         logger.info("SQL Agent Manager を初期化しました")
     except Exception as e:
-        error_msg = f"❌ エラー: SQL Agent Manager の初期化に失敗しました: {e}"
+        error_msg = f"❌ エラー: MCP サーバーの構築に失敗しました: {e}"
         logger.error(error_msg)
         print(error_msg, file=sys.stderr)
         sys.exit(1)
