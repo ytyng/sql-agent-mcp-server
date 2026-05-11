@@ -81,7 +81,7 @@ def build_server(config: dict) -> fastmcp.FastMCP:
     )
     async def execute_sql(
         server_name: Annotated[
-            str,
+            str | None,
             Field(
                 description=(
                     "実行する SQL サーバーの名前。"
