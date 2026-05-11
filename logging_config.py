@@ -30,8 +30,9 @@ def setup_logger_for_mcp_server(log_file_path: str | None = None) -> None:
 
     if _current_log_file_path == log_file_path:
         return
-    _current_log_file_path = log_file_path
 
+    # FileHandler の作成が失敗 (権限不正・ディレクトリ未存在等) しても
+    # 状態を破壊しないよう、_current_log_file_path の更新は成功した後で行う。
     file_handler = logging.FileHandler(
         log_file_path, mode='a', encoding='utf-8'
     )
@@ -40,6 +41,7 @@ def setup_logger_for_mcp_server(log_file_path: str | None = None) -> None:
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
     )
+    _current_log_file_path = log_file_path
 
     def _replace_handlers(target_logger: logging.Logger) -> None:
         # ファイルディスクリプタを残さないために古いハンドラを close してから外す

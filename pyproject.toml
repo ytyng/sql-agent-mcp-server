@@ -12,6 +12,26 @@ dependencies = [
     "pydantic>=2.0.0",
     "sshtunnel>=0.4.0",
 ]
+
+[project.scripts]
+sql-agent-cli = "sql_agent_cli:main"
+sql-agent-mcp-server = "mcp_server:main"
+
 [project.optional-dependencies]
 # uv sync --extra test
 test = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# モノレポではなくフラット構成 (パッケージディレクトリ無し) のため、
+# トップレベルの .py ファイルを明示的に列挙してホイールに含める。
+include = [
+    "config_loader.py",
+    "logging_config.py",
+    "mcp_server.py",
+    "sql_agent.py",
+    "sql_agent_cli.py",
+]
