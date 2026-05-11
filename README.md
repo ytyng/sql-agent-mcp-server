@@ -2,18 +2,23 @@
 
 ![](./documents/images/featured-image.png)
 
-An MCP server that connects to MySQL and PostgreSQL databases to execute queries.
+An MCP server that connects to MySQL and PostgreSQL databases to execute queries. A standalone CLI (`sql-agent-cli`) is also provided.
 
 [日本語版 README はこちら](README.ja.md)
+
+## ⚠️ Breaking Changes
+
+- **Config key rename**: `mysql_servers` → `sql_servers`. Update your `config.yaml`. The old key is no longer recognized.
+- **PostgreSQL row format**: The cursor was changed from `DictCursor` to `RealDictCursor`, so SELECT result rows are now plain dicts (`[{"col": value}]`) instead of list-shaped `DictRow` (`[[value]]`). This is a bug fix — clients that depended on positional access on Postgres results need to switch to key access.
+- **`python-dotenv` dependency removed**: `.env` files are no longer auto-loaded. Pass environment variables (`SQL_AGENT_CONFIG_YAML`, `SQL_AGENT_LOG_FILE_PATH`) via your MCP client's `env` block, or via your shell. Inline YAML can also be passed via `SQL_AGENT_CONFIG_YAML` instead of using a `config.yaml` file.
 
 ## Features
 
 - Connection management for multiple database servers
 - Support for both MySQL and PostgreSQL
 - SSH tunnel connection support
-- Retrieve table lists and schema information
-- Execute SQL queries
-- MySQL-specific administrative commands
+- Execute SQL queries via MCP server or CLI
+- Configuration via `config.yaml` or `SQL_AGENT_CONFIG_YAML` environment variable
 
 ## Installation
 
@@ -24,10 +29,14 @@ uv sync
 
 ## Configuration
 
-Create a `config.yaml` file to configure database server connection information.
+Create a `config.yaml` file to configure database server connection information. Alternatively, the entire YAML can be provided inline via the `SQL_AGENT_CONFIG_YAML` environment variable (takes precedence over the file).
 
 ```yaml
-mysql_servers:
+# Optional: log file path
+# Resolution order: this YAML value > SQL_AGENT_LOG_FILE_PATH env var > /tmp/sql-agent-mcp-server.log
+log_file_path: /tmp/sql-agent-mcp-server.log
+
+sql_servers:
   - name: my-postgres
     description: "PostgreSQL server"
     engine: postgres
@@ -52,7 +61,7 @@ mysql_servers:
 You can securely connect to remote databases using SSH tunnels.
 
 ```yaml
-mysql_servers:
+sql_servers:
   - name: remote-db
     description: "Remote database via SSH tunnel"
     engine: postgres
@@ -85,51 +94,33 @@ source .venv/bin/activate
 python mcp_server.py
 ```
 
-### Available Tools
+### MCP Tools
 
-#### 1. sql_query
-Execute SQL queries.
+#### `list_sql_servers`
+Get the list of registered SQL servers.
+
+#### `execute_sql`
+Execute a SQL query against a registered server and return the result as JSON.
 
 ```
 Parameters:
-- server_name: Server name
+- server_name: Server name (must match a name in sql_servers)
 - sql: SQL query to execute
 ```
 
-#### 2. get_server_list
-Get a list of registered servers.
+For schema introspection (table list, column info, etc.), use standard SQL such as `SHOW TABLES`, `DESCRIBE <table>` (MySQL) or queries against `pg_tables` / `information_schema` (PostgreSQL) via `execute_sql`.
 
-#### 3. get_table_list
-Get a list of tables for the specified server.
+### CLI Usage
 
-```
-Parameters:
-- server_name: Server name
-```
+A CLI mirrors the MCP tools — useful when you don't want to load the MCP server into the AI context.
 
-#### 4. get_table_schema
-Get schema information for a table.
-
-```
-Parameters:
-- server_name: Server name
-- table_name: Table name
+```bash
+sql-agent-cli list-sql-servers
+sql-agent-cli execute-sql --server my-postgres --sql "SELECT 1"
+echo "SELECT NOW()" | sql-agent-cli execute-sql -s my-postgres
 ```
 
-### MySQL-Specific Tools
-
-Administrative tools that can only be used with MySQL servers.
-
-- `get_mysql_status`: Get status information
-- `get_mysql_variables`: Get variable information
-- `get_mysql_processlist`: Get process list
-- `get_mysql_databases`: Get database list
-- `get_mysql_table_status`: Get table status
-- `get_mysql_indexes`: Get index information
-- `analyze_mysql_table`: Analyze table
-- `optimize_mysql_table`: Optimize table
-- `check_mysql_table`: Check table
-- `repair_mysql_table`: Repair table
+`sql-agent-cli --help` and `sql-agent-cli <subcommand> --help` show full options.
 
 ## Testing
 
