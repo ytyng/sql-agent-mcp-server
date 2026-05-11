@@ -5,6 +5,7 @@ SQL Agent - Core class for managing SQL connections and query execution
 
 import decimal
 import os
+import re
 from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Any, Dict, List
@@ -16,6 +17,18 @@ import pymysql.cursors
 from sshtunnel import SSHTunnelForwarder
 
 from logging_config import logger
+
+# SQL の文字列リテラル '...' を ログ出力時にマスクする正規表現。
+# 単一引用符の中身は次の 3 通りを許容:
+#   1. ' でも \ でもない普通の文字
+#   2. \. (バックスラッシュエスケープ; MySQL デフォルト)
+#   3. '' (二重シングルクォートでのエスケープ; PostgreSQL / 標準 SQL)
+_SQL_STRING_LITERAL_RE = re.compile(r"'(?:[^'\\]|\\.|'')*'")
+
+
+def mask_sql_for_log(sql: str) -> str:
+    """ログ出力用に SQL の文字列リテラルをマスクする (PII / 機密漏れ防止)"""
+    return _SQL_STRING_LITERAL_RE.sub("'***'", sql)
 
 
 class SQLAgent:
@@ -52,7 +65,7 @@ class SQLAgent:
                     database=self.config['schema'],
                     user=self.config['user'],
                     password=self.config['password'],
-                    cursor_factory=psycopg2.extras.DictCursor,
+                    cursor_factory=psycopg2.extras.RealDictCursor,
                 )
             elif self.config['engine'] == 'mysql':
                 self.connection = pymysql.connect(
@@ -105,7 +118,10 @@ class SQLAgent:
             # データベースに接続
             self.connect(ssh_tunnel)
 
-            logger.info(f"クエリ実行開始 ({self.config['name']}): {sql}")
+            sql_for_log = mask_sql_for_log(sql)
+            logger.info(
+                f"クエリ実行開始 ({self.config['name']}): {sql_for_log}"
+            )
 
             with self.connection.cursor() as cursor:
                 start_time = datetime.now()
@@ -116,6 +132,13 @@ class SQLAgent:
                     rows = cursor.fetchall()
                     # 結果を JSON シリアライズ可能な形式に変換
                     serializable_rows = self._make_serializable(rows)
+
+                    # RETURNING を使う INSERT/UPDATE/DELETE は fetchall に成功し、
+                    # この分岐に入る。autocommit=False のため明示 commit しないと
+                    # disconnect 時にロールバックされて変更が消える。
+                    # SELECT に対しても commit() は安全 (進行中の暗黙トランザクションを
+                    # 終わらせるだけで、変更が無いので副作用は無い) なので無条件で呼ぶ。
+                    self.connection.commit()
 
                     result = {
                         'success': True,
@@ -154,8 +177,13 @@ class SQLAgent:
                         'server_name': self.config['name'],
                     }
 
+                sql_log_tail = (
+                    sql_for_log[:100] + '...'
+                    if len(sql_for_log) > 100
+                    else sql_for_log
+                )
                 logger.info(
-                    f"クエリ実行完了 ({self.config['name']}): {sql[:100]}..."
+                    f"クエリ実行完了 ({self.config['name']}): {sql_log_tail}"
                 )
                 return result
 

@@ -1,4 +1,8 @@
-mysql_servers:
+# ログファイルのパス
+# 解決順: YAML (この値) > 環境変数 SQL_AGENT_LOG_FILE_PATH > デフォルト (/tmp/sql-agent-mcp-server.log)
+log_file_path: /tmp/sql-agent-mcp-server.log
+
+sql_servers:
   - name: dev-postgres
     description: "開発環境の PostgreSQL サーバー"
     engine: postgres
@@ -7,7 +11,7 @@ mysql_servers:
     schema: development_db
     user: dev_user
     password: your_password_here
-  
+
   - name: dev-mysql
     description: "開発環境の MySQL サーバー"
     engine: mysql
@@ -16,7 +20,7 @@ mysql_servers:
     schema: test_db
     user: mysql_user
     password: your_mysql_password
-  
+
   - name: production-db
     description: "本番環境のデータベースサーバー"
     engine: mysql
@@ -25,7 +29,7 @@ mysql_servers:
     schema: production_db
     user: prod_user
     password: production_password
-  
+
   - name: remote-db-with-ssh
     description: "SSH トンネル経由でアクセスするリモートデータベース"
     engine: postgres

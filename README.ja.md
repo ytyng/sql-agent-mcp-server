@@ -1,15 +1,20 @@
 # SQL Agent MCP Server
 
-MySQL と PostgreSQL に接続してクエリを実行できる MCP サーバーです。
+MySQL と PostgreSQL に接続してクエリを実行できる MCP サーバー。スタンドアロン CLI (`sql-agent-cli`) も同梱。
+
+## ⚠️ 破壊的変更 (Breaking Changes)
+
+- **設定キー名の変更**: `mysql_servers` → `sql_servers`。`config.yaml` を更新する必要あり。旧キーは認識されない。
+- **PostgreSQL の行形式**: cursor を `DictCursor` から `RealDictCursor` に変更。SELECT の rows が普通の dict (`[{"col": value}]`) になり、旧来の list 形 `DictRow` (`[[value]]`) ではなくなった。これはバグ修正。Postgres 結果に対して位置アクセスをしていたクライアントはキーアクセスに変更が必要。
+- **`python-dotenv` 依存削除**: `.env` の自動読み込みは廃止。環境変数 (`SQL_AGENT_CONFIG_YAML`, `SQL_AGENT_LOG_FILE_PATH`) は MCP クライアントの `env` ブロックやシェルから渡す。`config.yaml` の代わりに `SQL_AGENT_CONFIG_YAML` で YAML 文字列をインライン指定もできる。
 
 ## 機能
 
 - 複数のデータベースサーバーへの接続管理
 - MySQL と PostgreSQL の両方をサポート
 - SSH トンネル経由での接続サポート
-- テーブル一覧やスキーマ情報の取得
-- SQL クエリの実行
-- MySQL 専用の管理コマンド
+- MCP サーバーまたは CLI から SQL クエリを実行
+- `config.yaml` または `SQL_AGENT_CONFIG_YAML` 環境変数による設定
 
 ## インストール
 
@@ -20,10 +25,14 @@ uv sync
 
 ## 設定
 
-`config.yaml` ファイルを作成して、接続するデータベースサーバーの情報を設定します。
+`config.yaml` ファイルを作成して、接続するデータベースサーバーの情報を設定します。`SQL_AGENT_CONFIG_YAML` 環境変数で YAML 文字列を直接渡すこともできます (環境変数が優先)。
 
 ```yaml
-mysql_servers:
+# 任意: ログファイルのパス
+# 解決順: この YAML > 環境変数 SQL_AGENT_LOG_FILE_PATH > /tmp/sql-agent-mcp-server.log
+log_file_path: /tmp/sql-agent-mcp-server.log
+
+sql_servers:
   - name: my-postgres
     description: "PostgreSQL サーバー"
     engine: postgres
@@ -48,7 +57,7 @@ mysql_servers:
 SSH トンネルを使ってリモートのデータベースに安全に接続できます。
 
 ```yaml
-mysql_servers:
+sql_servers:
   - name: remote-db
     description: "SSH トンネル経由のリモートデータベース"
     engine: postgres
@@ -83,49 +92,31 @@ python mcp_server.py
 
 ### 利用可能なツール
 
-#### 1. sql_query
-SQL クエリを実行します。
+#### `list_sql_servers`
+登録されている SQL サーバーの一覧を取得します。
+
+#### `execute_sql`
+指定したサーバーで SQL を実行し、結果を JSON で返します。
 
 ```
 Parameters:
-- server_name: サーバー名
+- server_name: サーバー名 (sql_servers の name と一致する必要あり)
 - sql: 実行する SQL クエリ
 ```
 
-#### 2. get_server_list
-登録されているサーバーの一覧を取得します。
+スキーマ情報 (テーブル一覧、カラム情報など) は、`SHOW TABLES`、`DESCRIBE <table>` (MySQL) や `pg_tables` / `information_schema` への問い合わせ (PostgreSQL) を `execute_sql` 経由で実行してください。
 
-#### 3. get_table_list
-指定したサーバーのテーブル一覧を取得します。
+### CLI
 
-```
-Parameters:
-- server_name: サーバー名
-```
+MCP ツールと同じ機能をコマンドラインから利用できる CLI を同梱しています。AI エージェントのコンテキストに MCP サーバーをロードしたくない場合に有用です。
 
-#### 4. get_table_schema
-テーブルのスキーマ情報を取得します。
-
-```
-Parameters:
-- server_name: サーバー名
-- table_name: テーブル名
+```bash
+sql-agent-cli list-sql-servers
+sql-agent-cli execute-sql --server my-postgres --sql "SELECT 1"
+echo "SELECT NOW()" | sql-agent-cli execute-sql -s my-postgres
 ```
 
-### MySQL 専用ツール
-
-MySQL サーバーに対してのみ使用できる管理ツールです。
-
-- `get_mysql_status`: ステータス情報を取得
-- `get_mysql_variables`: 変数情報を取得
-- `get_mysql_processlist`: プロセス一覧を取得
-- `get_mysql_databases`: データベース一覧を取得
-- `get_mysql_table_status`: テーブルステータスを取得
-- `get_mysql_indexes`: インデックス情報を取得
-- `analyze_mysql_table`: テーブルを分析
-- `optimize_mysql_table`: テーブルを最適化
-- `check_mysql_table`: テーブルをチェック
-- `repair_mysql_table`: テーブルを修復
+`sql-agent-cli --help` および `sql-agent-cli <subcommand> --help` で全オプションを確認できます。
 
 ## テスト
 
