@@ -18,7 +18,7 @@ An MCP server that connects to MySQL and PostgreSQL databases to execute queries
 - Support for both MySQL and PostgreSQL
 - SSH tunnel connection support
 - Execute SQL queries via MCP server or CLI
-- Configuration via `config.yaml` or `SQL_AGENT_CONFIG_YAML` environment variable
+- Configuration via `config.yaml`, `SQL_AGENT_CONFIG_YAML`, or a lazy getter command (`SQL_AGENT_CONFIG_YAML_GETTER_COMMAND`) for secret managers
 
 ## Installation
 
@@ -29,7 +29,25 @@ uv sync
 
 ## Configuration
 
-Create a `config.yaml` file to configure database server connection information. Alternatively, the entire YAML can be provided inline via the `SQL_AGENT_CONFIG_YAML` environment variable (takes precedence over the file).
+Create a `config.yaml` file to configure database server connection information. Config is resolved in this order:
+
+1. `SQL_AGENT_CONFIG_YAML` — inline YAML string (highest precedence)
+2. `SQL_AGENT_CONFIG_YAML_GETTER_COMMAND` — a command whose stdout is the YAML config (run lazily; see below)
+3. `config.yaml` file in the project directory
+
+#### Lazy config loading (`SQL_AGENT_CONFIG_YAML_GETTER_COMMAND`)
+
+If your config lives in a secret manager (e.g. 1Password), pass the *command* that fetches it instead of the secret itself:
+
+```sh
+export SQL_AGENT_CONFIG_YAML_GETTER_COMMAND='op read "op://development/sql-agent/config-yaml"'
+```
+
+The command is **not** run at startup. It runs only when config is first actually needed — i.e. on the first `list_sql_servers` / `execute_sql` call. This avoids triggering a 1Password (etc.) authentication prompt every time the MCP client (e.g. Claude Desktop) launches the server.
+
+The command is split with `shlex.split` and executed with `shell=False` (no shell), so shell metacharacters cannot cause injection — but pipes, redirects, and variable expansion are **not** supported. Provide a single command (a wrapper script if you need shell features).
+
+To still show the server list in the tool descriptions without authenticating at startup, a **non-sensitive metadata cache** (server `name` / `description` / `engine` / `host` / `port` / `schema`, plus `log_file_path`) is written after the first successful load. Passwords and SSH private keys are **never** cached. Cache path defaults to `~/.cache/sql-agent-mcp-server/server-metadata.json` and can be overridden with `SQL_AGENT_CONFIG_CACHE_PATH`.
 
 ```yaml
 # Optional: log file path

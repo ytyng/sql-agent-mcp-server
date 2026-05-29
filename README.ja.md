@@ -14,7 +14,7 @@ MySQL と PostgreSQL に接続してクエリを実行できる MCP サーバー
 - MySQL と PostgreSQL の両方をサポート
 - SSH トンネル経由での接続サポート
 - MCP サーバーまたは CLI から SQL クエリを実行
-- `config.yaml` または `SQL_AGENT_CONFIG_YAML` 環境変数による設定
+- `config.yaml`、`SQL_AGENT_CONFIG_YAML`、または秘密マネージャー向けの遅延 getter コマンド (`SQL_AGENT_CONFIG_YAML_GETTER_COMMAND`) による設定
 
 ## インストール
 
@@ -25,7 +25,25 @@ uv sync
 
 ## 設定
 
-`config.yaml` ファイルを作成して、接続するデータベースサーバーの情報を設定します。`SQL_AGENT_CONFIG_YAML` 環境変数で YAML 文字列を直接渡すこともできます (環境変数が優先)。
+`config.yaml` ファイルを作成して、接続するデータベースサーバーの情報を設定します。設定は次の優先順で解決されます:
+
+1. `SQL_AGENT_CONFIG_YAML` — YAML 文字列をインライン指定 (最優先)
+2. `SQL_AGENT_CONFIG_YAML_GETTER_COMMAND` — stdout が YAML 設定になるコマンド (遅延実行。後述)
+3. プロジェクトディレクトリの `config.yaml` ファイル
+
+#### 設定の遅延ロード (`SQL_AGENT_CONFIG_YAML_GETTER_COMMAND`)
+
+設定を秘密マネージャー (例: 1Password) に置いている場合、秘密そのものではなく **取得コマンド** を渡せます:
+
+```sh
+export SQL_AGENT_CONFIG_YAML_GETTER_COMMAND='op read "op://development/sql-agent/config-yaml"'
+```
+
+このコマンドは **起動時には実行されません**。実際に設定が必要になった時 — つまり最初の `list_sql_servers` / `execute_sql` 呼び出し時 — にだけ実行されます。これにより、MCP クライアント (例: Claude Desktop) がサーバーを起動するたびに 1Password 等の認証ダイアログが出るのを防げます。
+
+コマンドは `shlex.split` で分解し `shell=False` で実行します (シェルを介さない)。そのためシェルメタ文字によるインジェクションは起きませんが、パイプ・リダイレクト・変数展開は **使えません**。シェル機能が必要な場合はラッパースクリプトを 1 コマンドとして渡してください。
+
+起動時に認証せずともツール説明にサーバー一覧を表示できるよう、初回ロード成功後に **機密を含まないメタデータキャッシュ** (サーバーの `name` / `description` / `engine` / `host` / `port` / `schema` と `log_file_path`) を保存します。パスワードや SSH 秘密鍵は **キャッシュしません**。キャッシュパスは既定で `~/.cache/sql-agent-mcp-server/server-metadata.json`、`SQL_AGENT_CONFIG_CACHE_PATH` で変更できます。
 
 ```yaml
 # 任意: ログファイルのパス
