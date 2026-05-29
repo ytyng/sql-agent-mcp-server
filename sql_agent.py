@@ -8,7 +8,7 @@ import os
 import re
 from contextlib import contextmanager
 from datetime import date, datetime
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 import psycopg2
 import psycopg2.extras
@@ -16,7 +16,8 @@ import pymysql
 import pymysql.cursors
 from sshtunnel import SSHTunnelForwarder
 
-from logging_config import logger
+from config_loader import save_metadata_cache
+from logging_config import logger, setup_logger_for_mcp_server
 
 # SQL の文字列リテラル '...' を ログ出力時にマスクする正規表現。
 # 単一引用符の中身は次の 3 通りを許容:
@@ -25,10 +26,19 @@ from logging_config import logger
 #   3. '' (二重シングルクォートでのエスケープ; PostgreSQL / 標準 SQL)
 _SQL_STRING_LITERAL_RE = re.compile(r"'(?:[^'\\]|\\.|'')*'")
 
+# PostgreSQL のドルクォート文字列をマスクする正規表現。
+# 開始/終了のタグが一致する必要があるため後方参照 (\1) を使う:
+#   - タグ無し: $$...$$ (\1 は空文字にマッチ)
+#   - タグ付き: $tag$...$tag$
+# 本文は改行を含みうるので [\s\S] で全文字を非貪欲にマッチさせる。
+_SQL_DOLLAR_QUOTE_RE = re.compile(r"\$(\w*)\$[\s\S]*?\$\1\$")
+
 
 def mask_sql_for_log(sql: str) -> str:
     """ログ出力用に SQL の文字列リテラルをマスクする (PII / 機密漏れ防止)"""
-    return _SQL_STRING_LITERAL_RE.sub("'***'", sql)
+    # ドルクォートを先にマスクする (本文に ' を含んでいても丸ごと潰すため)。
+    masked = _SQL_DOLLAR_QUOTE_RE.sub("$$***$$", sql)
+    return _SQL_STRING_LITERAL_RE.sub("'***'", masked)
 
 
 class SQLAgent:
@@ -330,17 +340,49 @@ class SQLAgent:
 class SQLAgentManager:
     """複数の SQL Agent を管理するクラス"""
 
-    def __init__(self, servers_config: List[Dict[str, Any]]):
+    def __init__(self, config_loader: Callable[[], Dict[str, Any]]):
         """
         Args:
-            servers_config: サーバー設定のリスト
+            config_loader: config (dict) を返す callable。実際に config が
+                必要になった初回アクセス時に一度だけ呼ばれる。getter command
+                経由の場合、この呼び出しが 1Password 等の認証をトリガーする。
         """
-        self.servers_config = servers_config
+        self._config_loader = config_loader
+        self._loaded = False
+        self.servers_config: List[Dict[str, Any]] = []
+        self.server_configs: Dict[str, Dict[str, Any]] = {}
         self.agents = {}
-        # サーバー名からサーバー設定を取得するための辞書を作成
+
+    def _ensure_loaded(self) -> None:
+        """config を初回アクセス時に一度だけロードする (memoize)。"""
+        if self._loaded:
+            return
+
+        config = self._config_loader()
+        self.servers_config = config.get('sql_servers', [])
         self.server_configs = {
-            config['name']: config for config in servers_config
+            server['name']: server for server in self.servers_config
         }
+
+        # ロード成功時に、機密を除いたメタデータをキャッシュ更新する。
+        # 次回起動時の instructions / ログパスに使われる (best-effort)。
+        save_metadata_cache(config)
+
+        # YAML に log_file_path があればログ設定を差し替える
+        # (起動時はキャッシュ or 環境変数のパス、初回ロード後に正規パスへ)。
+        # ただしログ設定の失敗で config ロード全体を巻き戻すと、次回呼び出しで
+        # 再び _config_loader() が走り 1Password 認証が毎回出るループになる。
+        # config 自体は読めているので、ログ差し替えは best-effort とし、
+        # 失敗しても起動時に設定済みの (動作中の) ロガーで続行する。
+        if config.get('log_file_path'):
+            try:
+                setup_logger_for_mcp_server(config['log_file_path'])
+            except Exception as e:
+                logger.warning(
+                    f"log_file_path への切り替えに失敗 (既存ロガーで続行): {e}"
+                )
+
+        self._loaded = True
 
     def get_agent(self, server_name: str) -> SQLAgent:
         """
@@ -353,6 +395,7 @@ class SQLAgentManager:
         Returns:
             SQL Agent インスタンス
         """
+        self._ensure_loaded()
         if server_name not in self.server_configs:
             raise ValueError(f"Server not found: {server_name}")
 
@@ -372,6 +415,7 @@ class SQLAgentManager:
         Returns:
             サーバー情報のリスト
         """
+        self._ensure_loaded()
         servers = []
         for config in self.servers_config:
             servers.append(

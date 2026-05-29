@@ -35,12 +35,12 @@ def _read_sql_from_stdin_or_arg(sql_arg: str | None) -> str:
 
 
 def _build_manager() -> SQLAgentManager:
-    # まずデフォルトパスでロガーを初期化 (load_config 失敗時にもログを残す)
+    # まずデフォルトパスでロガーを初期化 (load_config 失敗時にもログを残す)。
+    # CLI は明示的に実行されるので、起動時に config をロードして認証が走っても
+    # 問題ない。SQLAgentManager が初回アクセス時に load_config を呼び、
+    # log_file_path の再設定とメタデータキャッシュ更新も行う。
     setup_logger_for_mcp_server()
-    config = load_config()
-    if config.get('log_file_path'):
-        setup_logger_for_mcp_server(config['log_file_path'])
-    return SQLAgentManager(config.get('sql_servers', []))
+    return SQLAgentManager(load_config)
 
 
 # -- subcommand handlers --

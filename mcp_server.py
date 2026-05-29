@@ -4,6 +4,7 @@ MCP server for connecting to MySQL and PostgreSQL databases
 """
 
 import json
+import os
 import sys
 from textwrap import dedent
 from typing import Annotated
@@ -11,28 +12,46 @@ from typing import Annotated
 import fastmcp
 from pydantic import Field
 
-from config_loader import load_config
+from config_loader import load_config, load_metadata_cache
 from logging_config import logger, setup_logger_for_mcp_server
 from sql_agent import SQLAgentManager
 
 
-def build_server(config: dict) -> fastmcp.FastMCP:
-    """config から FastMCP サーバーインスタンスを構築してツールを登録する。
+def build_server() -> fastmcp.FastMCP:
+    """FastMCP サーバーインスタンスを構築してツールを登録する。
 
-    SQLAgentManager もここで作り、ツールハンドラからクロージャー越しに参照する。
-    モジュールグローバルを介さないので、テストやマルチ起動でも独立に動く。
+    config 本体 (パスワード等を含む) はここでは読み込まない。getter command
+    経由だと起動時に 1Password 認証が走ってしまうため。代わりに、機密を含まない
+    ローカルメタデータキャッシュ (前回ロード時に保存) から server_name 一覧を
+    instructions / tool description に埋め込む。キャッシュが無い初回起動時は
+    一覧が空になるが、LLM が list_sql_servers を呼べば実際の config が遅延ロード
+    される (このタイミングで初めて認証が走る)。
+
+    SQLAgentManager には load_config を loader として渡し、初回ツール呼び出し時に
+    遅延ロードさせる。
     """
-    sql_servers = config.get('sql_servers', [])
-    sql_server_names = [server['name'] for server in sql_servers]
-    sql_server_name_and_description = '\n\n'.join(
-        [
-            f"## server_name: {server['name']}\n\n"
-            f"{server.get('description', '')}"
-            for server in sql_servers
-        ]
-    )
+    cache = load_metadata_cache() or {}
+    cached_servers = cache.get('sql_servers', [])
+    # キャッシュが手動編集等で壊れて name 欠落があっても起動を止めない。
+    sql_server_names = [
+        server['name'] for server in cached_servers if server.get('name')
+    ]
+    if sql_server_names:
+        sql_server_name_and_description = '\n\n'.join(
+            [
+                f"## server_name: {server['name']}\n\n"
+                f"{server.get('description', '')}"
+                for server in cached_servers
+                if server.get('name')
+            ]
+        )
+    else:
+        sql_server_name_and_description = (
+            "(まだサーバー一覧をロードしていません。"
+            "list_sql_servers ツールを呼ぶと取得できます。)"
+        )
 
-    manager = SQLAgentManager(sql_servers)
+    manager = SQLAgentManager(load_config)
 
     server = fastmcp.FastMCP(
         name="sql-agent-mcp-server",
@@ -45,6 +64,9 @@ def build_server(config: dict) -> fastmcp.FastMCP:
             テーブルの構造を読むことはできます。
 
             # SQL サーバー の名前 (server_name) と説明
+
+            下記はローカルキャッシュに基づく一覧です。最新の一覧は
+            list_sql_servers ツールで取得してください。
 
             {sql_server_name_and_description}
             """
@@ -139,27 +161,27 @@ def build_server(config: dict) -> fastmcp.FastMCP:
 def main() -> None:
     """メイン関数: MCPサーバーを起動します"""
 
-    # 起動エラーもログに残るよう、デフォルトパス (or 環境変数) で先にロガーを
-    # 初期化する。
-    setup_logger_for_mcp_server()
-
-    try:
-        config = load_config()
-    except Exception as e:
-        error_msg = f"❌ エラー: 設定の読み込みに失敗しました: {e}"
-        logger.error(error_msg)
-        print(error_msg, file=sys.stderr)
-        sys.exit(1)
-
-    # config に log_file_path があれば再設定 (パスが違えば差し替え)
-    if config.get('log_file_path'):
-        setup_logger_for_mcp_server(config['log_file_path'])
+    # 起動時は config 本体 (パスワード等) を読み込まない。getter command 経由だと
+    # 起動時に 1Password 認証が走ってしまうため、実際の config ロードは最初の
+    # ツール呼び出しまで遅延させる (SQLAgentManager._ensure_loaded)。
+    #
+    # ログパスの解決順:
+    #   1. 環境変数 SQL_AGENT_LOG_FILE_PATH
+    #   2. メタデータキャッシュの log_file_path (前回ロード時に保存)
+    #   3. デフォルトパス
+    # config (YAML) 内の log_file_path は初回ロード後に再設定される。
+    cache = load_metadata_cache() or {}
+    cached_log_path = cache.get('log_file_path')
+    if not os.environ.get('SQL_AGENT_LOG_FILE_PATH') and cached_log_path:
+        setup_logger_for_mcp_server(cached_log_path)
+    else:
+        setup_logger_for_mcp_server()
 
     logger.info("MCP サーバー起動中...")
 
     try:
-        server = build_server(config)
-        logger.info("SQL Agent Manager を初期化しました")
+        server = build_server()
+        logger.info("SQL Agent Manager を初期化しました (config は遅延ロード)")
     except Exception as e:
         error_msg = f"❌ エラー: MCP サーバーの構築に失敗しました: {e}"
         logger.error(error_msg)
