@@ -51,8 +51,8 @@ To still show the server list in the tool descriptions without authenticating at
 
 ```yaml
 # Optional: log file path
-# Resolution order: this YAML value > SQL_AGENT_LOG_FILE_PATH env var > /tmp/sql-agent-mcp-server.log
-log_file_path: /tmp/sql-agent-mcp-server.log
+# Resolution order: this YAML value > SQL_AGENT_LOG_FILE_PATH env var > /tmp/sql-agent/sql-agent-mcp-server.log
+log_file_path: /tmp/sql-agent/sql-agent-mcp-server.log
 
 sql_servers:
   - name: my-postgres
@@ -98,6 +98,42 @@ sql_servers:
       # private_key_path: ~/.ssh/id_rsa
       # private_key_passphrase: key_passphrase  # If passphrase is required
 ```
+
+### Sharing connection info with templates (`sql_server_templates`)
+
+When you access multiple schemas on the same DB instance, you can avoid
+repeating connection info (engine / host / port / user / password / ssh_tunnel,
+etc.) across `sql_servers`. Define the shared fields in `sql_server_templates`
+and reference them from each server with `template: <template name>`.
+
+```yaml
+sql_server_templates:
+  - name: my-awesome-sql-host
+    engine: mysql
+    host: db.example.com
+    port: 3306
+    user: shared_user
+    password: shared_password
+
+sql_servers:
+  - template: my-awesome-sql-host
+    name: my-app-db
+    description: "Application DB"
+    schema: app_db
+
+  - template: my-awesome-sql-host
+    name: my-log-db
+    description: "Logging DB"
+    schema: log_db
+```
+
+- Keys set on a server override the same key from the template (shallow merge).
+  A nested value such as `ssh_tunnel` is replaced wholesale if the server
+  defines it.
+- The template's `name` is only a lookup key and is not inherited; every server
+  must have its own `name`.
+- Servers without a `template` work as before, and `sql_server_templates` itself
+  is optional (backward compatible).
 
 ## Usage
 
@@ -160,7 +196,7 @@ python3 test-requests/test_mangazenkan_dev.py
 
 ## Logging
 
-- Application logs are output to `/tmp/sql-agent-mcp-server.log`
+- Application logs are output to `/tmp/sql-agent/sql-agent-mcp-server.log`
 - Configured to prevent logs from being output to stdout for MCP communication
 
 ## Security Considerations

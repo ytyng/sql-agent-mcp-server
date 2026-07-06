@@ -1,6 +1,6 @@
 # ログファイルのパス
-# 解決順: YAML (この値) > 環境変数 SQL_AGENT_LOG_FILE_PATH > デフォルト (/tmp/sql-agent-mcp-server.log)
-log_file_path: /tmp/sql-agent-mcp-server.log
+# 解決順: YAML (この値) > 環境変数 SQL_AGENT_LOG_FILE_PATH > デフォルト (/tmp/sql-agent/sql-agent-mcp-server.log)
+log_file_path: /tmp/sql-agent/sql-agent-mcp-server.log
 
 sql_servers:
   - name: dev-postgres
@@ -45,3 +45,29 @@ sql_servers:
       password: ssh_password  # または private_key_path を使用
       # private_key_path: ~/.ssh/id_rsa  # パスワードの代わりに秘密鍵を使用する場合
       # private_key_passphrase: key_passphrase  # 秘密鍵にパスフレーズがある場合
+
+# --- テンプレートで接続情報を共有する例 ---
+# 同一 DB インスタンス上の複数 schema を扱う場合、共通の接続情報 (engine /
+# host / port / user / password / ssh_tunnel 等) を sql_server_templates に
+# まとめ、sql_servers 側では `template: <名前>` で継承して schema だけ変える。
+# サーバー側で指定したキーはテンプレートの同名キーを上書きする (シャローマージ)。
+sql_server_templates:
+  - name: my-awesome-sql-host
+    engine: mysql
+    host: db.example.com
+    port: 3306
+    user: shared_user
+    password: shared_password
+
+# 上のテンプレートを使うと、以下のように重複を書かずに複数 schema を登録できる:
+#
+# sql_servers:
+#   - template: my-awesome-sql-host
+#     name: my-app-db
+#     description: "アプリ本体の DB"
+#     schema: app_db
+#
+#   - template: my-awesome-sql-host
+#     name: my-log-db
+#     description: "ログ用 DB"
+#     schema: log_db

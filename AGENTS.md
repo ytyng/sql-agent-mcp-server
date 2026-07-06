@@ -48,7 +48,7 @@ This project implements the following measures:
 
 - Configure log handlers to file output only with the `setup_logger_for_mcp_server()` function
 - Adjust log levels for FastMCP and related libraries
-- Application logs are output to `/tmp/sql-agent-mcp-server.log`
+- Application logs are output to `/tmp/sql-agent/sql-agent-mcp-server.log`
 
 ## Development Notes
 
