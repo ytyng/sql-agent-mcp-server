@@ -47,8 +47,8 @@ export SQL_AGENT_CONFIG_YAML_GETTER_COMMAND='op read "op://development/sql-agent
 
 ```yaml
 # 任意: ログファイルのパス
-# 解決順: この YAML > 環境変数 SQL_AGENT_LOG_FILE_PATH > /tmp/sql-agent-mcp-server.log
-log_file_path: /tmp/sql-agent-mcp-server.log
+# 解決順: この YAML > 環境変数 SQL_AGENT_LOG_FILE_PATH > /tmp/sql-agent/sql-agent-mcp-server.log
+log_file_path: /tmp/sql-agent/sql-agent-mcp-server.log
 
 sql_servers:
   - name: my-postgres
@@ -94,6 +94,35 @@ sql_servers:
       # private_key_path: ~/.ssh/id_rsa
       # private_key_passphrase: key_passphrase  # パスフレーズがある場合
 ```
+
+### テンプレートで接続情報を共有する (`sql_server_templates`)
+
+同一 DB インスタンス上の複数 schema を扱う場合など、`sql_servers` に接続情報 (engine / host / port / user / password / ssh_tunnel 等) を重複して書くのを避けられます。共通項目を `sql_server_templates` にまとめ、各サーバーで `template: <テンプレート名>` を指定して継承します。
+
+```yaml
+sql_server_templates:
+  - name: my-awesome-sql-host
+    engine: mysql
+    host: db.example.com
+    port: 3306
+    user: shared_user
+    password: shared_password
+
+sql_servers:
+  - template: my-awesome-sql-host
+    name: my-app-db
+    description: "アプリ本体の DB"
+    schema: app_db
+
+  - template: my-awesome-sql-host
+    name: my-log-db
+    description: "ログ用 DB"
+    schema: log_db
+```
+
+- サーバー側で指定したキーは、テンプレートの同名キーを上書きします (シャローマージ)。`ssh_tunnel` のようなネストした値をサーバー側で指定すると丸ごと置き換わります。
+- テンプレートの `name` はルックアップ用のキーなので継承されません。各サーバーは自分自身の `name` を持つ必要があります。
+- `template` を指定しないサーバーは従来どおりそのまま使えます。`sql_server_templates` 自体を書かなくても構いません (後方互換)。
 
 ## 使い方
 
@@ -156,7 +185,7 @@ python3 test-requests/test_mangazenkan_dev.py
 
 ## ログ
 
-- アプリケーションログは `/tmp/sql-agent-mcp-server.log` に出力されます
+- アプリケーションログは `/tmp/sql-agent/sql-agent-mcp-server.log` に出力されます
 - MCP 通信ではログが標準出力に出力されないよう設定済みです
 
 ## セキュリティに関する注意

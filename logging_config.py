@@ -3,7 +3,7 @@ import os
 
 _current_log_file_path: str | None = None
 
-DEFAULT_LOG_FILE_PATH = '/tmp/sql-agent-mcp-server.log'
+DEFAULT_LOG_FILE_PATH = '/tmp/sql-agent/sql-agent-mcp-server.log'
 
 
 def setup_logger_for_mcp_server(log_file_path: str | None = None) -> None:
@@ -30,6 +30,11 @@ def setup_logger_for_mcp_server(log_file_path: str | None = None) -> None:
 
     if _current_log_file_path == log_file_path:
         return
+
+    # 親ディレクトリが無ければ作る (デフォルトの /tmp/sql-agent/ 等)。
+    log_dir = os.path.dirname(log_file_path)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
 
     # FileHandler の作成が失敗 (権限不正・ディレクトリ未存在等) しても
     # 状態を破壊しないよう、_current_log_file_path の更新は成功した後で行う。
