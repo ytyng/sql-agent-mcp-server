@@ -21,6 +21,12 @@ sql-agent-mcp-server = "mcp_server:main"
 # uv sync --extra test
 test = []
 
+[dependency-groups]
+# .pre-commit-config.yaml の ruff-pre-commit と同じ系列のバージョンを使う
+dev = [
+    "ruff>=0.16.0,<0.17",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -35,3 +41,131 @@ include = [
     "sql_agent.py",
     "sql_agent_cli.py",
 ]
+
+[tool.ruff]
+target-version = 'py312'
+# 旧 black の --line-length 79 を踏襲する
+line-length = 79
+exclude = [
+    '.venv',
+    # ruff 0.16 以降は Markdown 中の Python コードブロックも整形対象にするが、
+    # 本タスクは Python コードの移行が目的なのでドキュメントは対象外にする
+    '*.md',
+]
+# pre-commit はファイルパスを明示的に渡すため、これが無いと exclude が無視される
+force-exclude = true
+
+[tool.ruff.lint]
+select = ['ALL']
+ignore = [
+    # ruff format と競合するため公式が ignore を推奨しているルール
+    # https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+    'W191', # tab-indentation
+    'E111', # indentation-with-invalid-multiple
+    'E114', # indentation-with-invalid-multiple-comment
+    'E117', # over-indented
+    'D206', # docstring-tab-indentation
+    'D300', # triple-single-quotes
+    'Q000', # bad-quotes-inline-string
+    'Q001', # bad-quotes-multiline-string
+    'Q002', # bad-quotes-docstring
+    'Q003', # avoidable-escaped-quote
+    'COM812', # missing-trailing-comma
+    'COM819', # prohibited-trailing-comma
+    'ISC001', # single-line-implicit-string-concatenation
+    'ISC002', # multi-line-implicit-string-concatenation
+
+    # ANN: 型アノテーション
+    'ANN', # 引数・戻り値の型アノテーションがない (ANN001-ANN401)。段階導入方針のため除外
+
+    # ARG: 未使用引数
+    'ARG001', # 未使用関数引数。argparse のサブコマンドハンドラ等シグネチャ固定の箇所で必要
+
+    # BLE: broad except
+    'BLE001', # except Exception の検出。MCP サーバーの継続実行のため意図的に使用
+
+    # C901 / PLR: 複雑度
+    'C901', # 関数の循環的複雑度が高い (デフォルト閾値: 10)
+    'PLR0911', # 関数の return 文が多すぎる
+    'PLR2004', # マジックナンバー比較。定数化のコストに対して効果が薄い
+
+    # CPY: 著作権表示
+    'CPY001', # ファイル先頭の著作権表示がない。LICENSE ファイルで示しているため不要
+
+    # D: docstring
+    'D203', # クラス定義の前に 1 行空行。D211 (空行なし) と排他のため除外
+    'D100', # モジュールレベルの docstring がない
+    'D101', # public クラスに docstring がない
+    'D102', # public メソッドに docstring がない
+    'D103', # public 関数に docstring がない
+    'D104', # __init__.py に docstring がない
+    'D105', # __str__ 等 magic メソッドに docstring がない
+    'D107', # __init__ に docstring がない
+    'D200', # 1 行で書ける docstring を複数行で書いている
+    'D205', # docstring のサマリ行の後に空行がない。日本語の複数行 docstring が多いため除外
+    'D212', # docstring サマリを 1 行目に置く形式。D213 (2 行目) を採用するため除外
+    'D400', # docstring がピリオドで終わっていない
+    'D401', # docstring の先頭が命令形でない
+    'D415', # docstring の終端が . ? ! でない
+
+    # DTZ: datetime timezone
+    'DTZ005', # datetime.now() にタイムゾーン指定がない
+
+    # EM: 例外メッセージのリテラル化
+    'EM101', # raise SomeError("リテラル") でメッセージを変数に切り出すことを促す
+    'EM102', # raise SomeError(f"...") で f-string を変数に切り出すことを促す
+
+    # ERA: コメントアウトコード
+    'ERA001', # コメントアウトされたコードの検出。日本語コメント等での誤検知が多い
+
+    # EXE: 実行権限
+    'EXE001', # shebang があるのに実行権限がない。エントリポイントは [project.scripts] で提供しており、
+    # shebang はインタプリタを示す記述として残しているだけなので実行権限は付けない
+
+    # PERF: パフォーマンス
+    'PERF401', # 手動ループの list comprehension 化。既存スタイルを維持
+
+    # PLW: pylint warning
+    'PLW0603', # global 文による書き換え (ロガー設定のモジュール状態として意図的)
+
+    # PTH: pathlib への書き換え
+    'PTH', # os.path 系 API の pathlib 化提案。既存の os.path スタイルを維持
+
+    # RUF: Ruff 固有
+    'RUF001', # 文字列中に全角スペース・類似 Unicode 文字。日本語プロジェクトの仕様として許容
+    'RUF002', # docstring 中に全角スペース・類似 Unicode 文字。同上
+    'RUF003', # コメント内の全角スペース等 Unicode 文字。同上
+
+    # S: セキュリティ (bandit)
+    'S108', # /tmp 固定パスの使用。ログの既定の出力先として README に記載済み
+
+    # T: print
+    'T201', # print() の使用。CLI (sql_agent_cli.py) の出力に必要
+
+    # TRY: 例外処理
+    'TRY003', # 例外クラス外で長いメッセージを定義することを促す。コストに対して効果が薄い
+    'TRY004', # 型が不正な場合に TypeError を促す。設定ファイルの検証は ValueError で統一している
+    'TRY301', # try 内の raise を内部関数へ切り出すことを促す。既存スタイルを維持
+]
+
+[tool.ruff.lint.pycodestyle]
+# ruff format が 79 桁でコードを整形するが、URL や日本語のメッセージのような
+# 分割できない文字列リテラル・コメントは折り返されない。
+# 旧 flake8 の B950 (max-line-length 88 に対して 10% の猶予) と同じく、
+# format の幅より緩い上限を lint 側の歯止めとして持たせる
+max-line-length = 110
+
+[tool.ruff.lint.per-file-ignores]
+# ログ設定の失敗でアプリを落とさないため、意図的に try-except-pass している
+# (該当箇所にコメントあり)。S110 を global ignore にすると本物の握り潰しを
+# 見逃すので、ファイル単位に限定する
+'config_loader.py' = ['S110']
+'logging_config.py' = [
+    'S110', # try-except-pass
+    'SIM105', # contextlib.suppress への書き換え提案。上記と同じ箇所
+]
+
+[tool.ruff.format]
+# 旧 black は --skip-string-normalization で既存のクォートを維持していた。
+# コード中はシングルクォートが多数派のため single に揃える
+quote-style = 'single'

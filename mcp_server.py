@@ -18,7 +18,8 @@ from sql_agent import SQLAgentManager
 
 
 def build_server() -> fastmcp.FastMCP:
-    """FastMCP サーバーインスタンスを構築してツールを登録する。
+    """
+    FastMCP サーバーインスタンスを構築してツールを登録する。
 
     config 本体 (パスワード等を含む) はここでは読み込まない。getter command
     経由だと起動時に 1Password 認証が走ってしまうため。代わりに、機密を含まない
@@ -39,22 +40,22 @@ def build_server() -> fastmcp.FastMCP:
     if sql_server_names:
         sql_server_name_and_description = '\n\n'.join(
             [
-                f"## server_name: {server['name']}\n\n"
-                f"{server.get('description', '')}"
+                f'## server_name: {server["name"]}\n\n'
+                f'{server.get("description", "")}'
                 for server in cached_servers
                 if server.get('name')
             ]
         )
     else:
         sql_server_name_and_description = (
-            "(まだサーバー一覧をロードしていません。"
-            "list_sql_servers ツールを呼ぶと取得できます。)"
+            '(まだサーバー一覧をロードしていません。'
+            'list_sql_servers ツールを呼ぶと取得できます。)'
         )
 
     manager = SQLAgentManager(load_config)
 
     server = fastmcp.FastMCP(
-        name="sql-agent-mcp-server",
+        name='sql-agent-mcp-server',
         instructions=dedent(
             f"""
             MySQL と Postgres に接続する MCP サーバーです。
@@ -74,7 +75,7 @@ def build_server() -> fastmcp.FastMCP:
     )
 
     @server.tool(
-        name="list_sql_servers",
+        name='list_sql_servers',
         description="""登録してある SQL サーバーの一覧を取得します。
 """,
     )
@@ -86,16 +87,16 @@ def build_server() -> fastmcp.FastMCP:
                 'servers': servers,
                 'count': len(servers),
             }
-            logger.info(f"サーバー一覧を取得しました: {len(servers)} 個")
+            logger.info(f'サーバー一覧を取得しました: {len(servers)} 個')
             return json.dumps(result, ensure_ascii=False, indent=2)
 
         except Exception as e:
-            logger.error(f"サーバー一覧取得エラー: {e}")
+            logger.error(f'サーバー一覧取得エラー: {e}')
             result = {'success': False, 'error': str(e)}
             return json.dumps(result, ensure_ascii=False, indent=2)
 
     @server.tool(
-        name="execute_sql",
+        name='execute_sql',
         description=f"""SQL クエリを実行し、結果を JSON で返します。
 
 利用可能な server_name: {', '.join(sql_server_names)}
@@ -106,8 +107,8 @@ def build_server() -> fastmcp.FastMCP:
             str | None,
             Field(
                 description=(
-                    "実行する SQL サーバーの名前。"
-                    " config.yaml の sql_servers の name"
+                    '実行する SQL サーバーの名前。'
+                    ' config.yaml の sql_servers の name'
                 ),
                 examples=sql_server_names,
             ),
@@ -115,9 +116,9 @@ def build_server() -> fastmcp.FastMCP:
         sql: Annotated[
             str | None,
             Field(
-                description=("実行する SQL クエリ。"),
+                description=('実行する SQL クエリ。'),
                 examples=[
-                    "SELECT * FROM users",
+                    'SELECT * FROM users',
                     "UPDATE posts SET title = 'New Title' WHERE id = 1",
                 ],
             ),
@@ -140,13 +141,13 @@ def build_server() -> fastmcp.FastMCP:
         try:
             agent = manager.get_agent(server_name)
 
-            logger.info(f"SQL 実行開始 ({server_name})")
+            logger.info(f'SQL 実行開始 ({server_name})')
             result = agent.execute_query(sql)
 
             return json.dumps(result, ensure_ascii=False, indent=2)
 
         except Exception as e:
-            logger.error(f"SQL 実行エラー ({server_name}): {e}")
+            logger.error(f'SQL 実行エラー ({server_name}): {e}')
             result = {
                 'success': False,
                 'error': str(e),
@@ -160,7 +161,6 @@ def build_server() -> fastmcp.FastMCP:
 
 def main() -> None:
     """メイン関数: MCPサーバーを起動します"""
-
     # 起動時は config 本体 (パスワード等) を読み込まない。getter command 経由だと
     # 起動時に 1Password 認証が走ってしまうため、実際の config ロードは最初の
     # ツール呼び出しまで遅延させる (SQLAgentManager._ensure_loaded)。
@@ -177,26 +177,26 @@ def main() -> None:
     else:
         setup_logger_for_mcp_server()
 
-    logger.info("MCP サーバー起動中...")
+    logger.info('MCP サーバー起動中...')
 
     try:
         server = build_server()
-        logger.info("SQL Agent Manager を初期化しました (config は遅延ロード)")
+        logger.info('SQL Agent Manager を初期化しました (config は遅延ロード)')
     except Exception as e:
-        error_msg = f"❌ エラー: MCP サーバーの構築に失敗しました: {e}"
+        error_msg = f'❌ エラー: MCP サーバーの構築に失敗しました: {e}'
         logger.error(error_msg)
         print(error_msg, file=sys.stderr)
         sys.exit(1)
 
     try:
-        logger.info("MCP サーバー起動完了")
+        logger.info('MCP サーバー起動完了')
         server.run()  # stdio is default
     except KeyboardInterrupt:
-        logger.info("MCP サーバーを終了します (KeyboardInterrupt)")
+        logger.info('MCP サーバーを終了します (KeyboardInterrupt)')
     except Exception as e:
-        logger.error(f"MCP サーバーエラー: {e}", exc_info=True)
+        logger.error(f'MCP サーバーエラー: {e}', exc_info=True)
         raise
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -59,7 +59,7 @@ sql_servers:
     schema: mydb
     user: postgres
     password: password
-  
+
   - name: my-mysql
     description: "MySQL サーバー"
     engine: mysql

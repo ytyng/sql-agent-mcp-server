@@ -5,6 +5,7 @@ sql-agent-cli - SQL Agent MCP サーバーの CLI インターフェイス
 MCP サーバーと同じ機能をコマンドラインから利用可能にする。
 SQLAgentManager を直接使用し、MCP レイヤーを通さない。
 """
+
 import argparse
 import json
 import sys
@@ -23,13 +24,13 @@ def _read_sql_from_stdin_or_arg(sql_arg: str | None) -> str:
         return sql_arg
     if sys.stdin.isatty():
         print(
-            "Error: --sql を指定するか、SQL を標準入力から渡してください",
+            'Error: --sql を指定するか、SQL を標準入力から渡してください',
             file=sys.stderr,
         )
         sys.exit(1)
     sql = sys.stdin.read().strip()
     if not sql:
-        print("Error: SQL が空です", file=sys.stderr)
+        print('Error: SQL が空です', file=sys.stderr)
         sys.exit(1)
     return sql
 
