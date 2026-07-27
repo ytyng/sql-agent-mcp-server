@@ -3,16 +3,19 @@
 SSH トンネル機能のテストスクリプト
 """
 
-import yaml
 import logging
-from sql_agent import SQLAgent
+
+import yaml
+
+# 下部のコメントアウトされた実接続テストで使うため、未使用でも残す
+from sql_agent import SQLAgent  # noqa: F401
 
 # ログ設定
 logging.basicConfig(level=logging.INFO)
 
+
 def test_ssh_tunnel():
     """SSH トンネル機能をテストする"""
-    
     # テスト用の設定
     test_config = {
         'name': 'test-ssh-server',
@@ -30,26 +33,26 @@ def test_ssh_tunnel():
             'password': 'ssh_password',
             # 'private_key_path': '~/.ssh/id_rsa',  # 秘密鍵を使う場合
             # 'private_key_passphrase': 'key_passphrase',  # パスフレーズがある場合
-        }
+        },
     }
-    
-    print("SSH トンネル機能のテスト設定例:")
+
+    print('SSH トンネル機能のテスト設定例:')
     print(yaml.dump(test_config, allow_unicode=True, default_flow_style=False))
-    
+
     # 実際に接続するには以下のコメントを外してください
     # agent = SQLAgent(test_config)
     # try:
     #     agent.connect()
     #     print("SSH トンネル経由でデータベースに接続しました！")
-    #     
+    #
     #     # テーブル一覧を取得
     #     result = agent.get_table_list()
     #     print(f"テーブル数: {result.get('row_count', 0)}")
-    #     
+    #
     # finally:
     #     agent.disconnect()
     #     print("接続を閉じました")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     test_ssh_tunnel()

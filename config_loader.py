@@ -23,6 +23,7 @@ sql_server_templates (接続情報の雛形) にも対応する。同一 DB イ�
 展開はロード直後 (load_config 内) に行うため、消費側は常に展開済みの
 sql_servers を受け取る。
 """
+
 import json
 import os
 import shlex
@@ -37,15 +38,15 @@ def _parse_yaml(yaml_text: str, source: str) -> dict[str, Any]:
     try:
         data = yaml.safe_load(yaml_text)
     except yaml.YAMLError as e:
-        raise ValueError(f"{source} の YAML パースに失敗: {e}") from e
+        raise ValueError(f'{source} の YAML パースに失敗: {e}') from e
 
     if not data:
-        raise ValueError(f"Config is empty: {source}")
+        raise ValueError(f'Config is empty: {source}')
 
     if not isinstance(data, dict):
         raise ValueError(
-            f"Config must be a YAML mapping, got {type(data).__name__}:"
-            f" {source}"
+            f'Config must be a YAML mapping, got {type(data).__name__}:'
+            f' {source}'
         )
 
     return data
@@ -53,7 +54,7 @@ def _parse_yaml(yaml_text: str, source: str) -> dict[str, Any]:
 
 def _run_getter_command(command: str) -> str:
     """
-    getter command を実行して stdout を返す。
+    Getter command を実行して stdout を返す。
 
     `op read "op://..."` を shlex.split で argv に分解し、shell=False で実行する。
     shell を介さないため、コマンド文字列に `;` `|` `$()` 等が混入しても
@@ -65,45 +66,49 @@ def _run_getter_command(command: str) -> str:
     except ValueError as e:
         # クォートが閉じていない等で分解に失敗
         raise ValueError(
-            f"SQL_AGENT_CONFIG_YAML_GETTER_COMMAND の解析に失敗"
-            f" (クォート不整合等): {command!r}: {e}"
+            f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND の解析に失敗'
+            f' (クォート不整合等): {command!r}: {e}'
         ) from e
     if not argv:
-        raise ValueError(
-            "SQL_AGENT_CONFIG_YAML_GETTER_COMMAND が空です"
-        )
+        raise ValueError('SQL_AGENT_CONFIG_YAML_GETTER_COMMAND が空です')
 
     try:
-        result = subprocess.run(
+        # S603: shell=False なのでシェルメタ文字による注入は起きない
+        # (上記 docstring 参照)。argv そのものは環境変数
+        # SQL_AGENT_CONFIG_YAML_GETTER_COMMAND 由来であり、これは MCP クライアントの
+        # 起動設定として管理される信頼済みの入力という前提で扱う。
+        result = subprocess.run(  # noqa: S603
             argv,
             shell=False,
             capture_output=True,
             text=True,
             # 認証待ち等で無限ハングするとツール呼び出しが固まるので timeout 必須。
             timeout=60,
+            # returncode は下で自前に検査するので例外送出はしない。
+            check=False,
         )
     except subprocess.TimeoutExpired as e:
         raise ValueError(
-            f"SQL_AGENT_CONFIG_YAML_GETTER_COMMAND がタイムアウト"
-            f" ({e.timeout}秒): {command!r}"
-            f" (1Password 等の認証待ちでハングしている可能性)"
+            f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND がタイムアウト'
+            f' ({e.timeout}秒): {command!r}'
+            f' (1Password 等の認証待ちでハングしている可能性)'
         ) from e
     except Exception as e:
         raise ValueError(
-            f"SQL_AGENT_CONFIG_YAML_GETTER_COMMAND の実行に失敗:"
-            f" {command!r}: {e}"
+            f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND の実行に失敗:'
+            f' {command!r}: {e}'
         ) from e
 
     if result.returncode != 0:
         raise ValueError(
-            f"SQL_AGENT_CONFIG_YAML_GETTER_COMMAND が異常終了"
-            f" (code={result.returncode}): {command!r}\n"
-            f"stderr: {result.stderr.strip()}"
+            f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND が異常終了'
+            f' (code={result.returncode}): {command!r}\n'
+            f'stderr: {result.stderr.strip()}'
         )
 
     if not result.stdout.strip():
         raise ValueError(
-            f"SQL_AGENT_CONFIG_YAML_GETTER_COMMAND の出力が空: {command!r}"
+            f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND の出力が空: {command!r}'
         )
 
     return result.stdout
@@ -142,27 +147,25 @@ def _expand_server_templates(config: dict[str, Any]) -> dict[str, Any]:
         ]
         if stray:
             raise ValueError(
-                "sql_servers が template を参照していますが"
-                f" sql_server_templates が定義されていません: {stray}"
+                'sql_servers が template を参照していますが'
+                f' sql_server_templates が定義されていません: {stray}'
             )
         return config
 
     if not isinstance(templates_list, list):
-        raise ValueError(
-            "sql_server_templates はリストである必要があります"
-        )
+        raise ValueError('sql_server_templates はリストである必要があります')
 
     templates: dict[str, dict[str, Any]] = {}
     for i, template in enumerate(templates_list):
         if not isinstance(template, dict) or 'name' not in template:
             raise ValueError(
-                f"sql_server_templates の {i} 番目の要素は"
-                " name を持つマッピングである必要があります"
+                f'sql_server_templates の {i} 番目の要素は'
+                ' name を持つマッピングである必要があります'
             )
         name = template['name']
         if name in templates:
             raise ValueError(
-                f"sql_server_templates に重複した name があります: {name!r}"
+                f'sql_server_templates に重複した name があります: {name!r}'
             )
         templates[name] = template
 
@@ -170,8 +173,8 @@ def _expand_server_templates(config: dict[str, Any]) -> dict[str, Any]:
     for i, server in enumerate(servers_list):
         if not isinstance(server, dict):
             raise ValueError(
-                f"sql_servers の {i} 番目の要素は"
-                " マッピングである必要があります"
+                f'sql_servers の {i} 番目の要素は'
+                ' マッピングである必要があります'
             )
         template_name = server.get('template')
         if template_name is None:
@@ -179,9 +182,9 @@ def _expand_server_templates(config: dict[str, Any]) -> dict[str, Any]:
             continue
         if template_name not in templates:
             raise ValueError(
-                "sql_servers が参照するテンプレートが見つかりません:"
-                f" template={template_name!r}"
-                f" (定義済み: {sorted(templates)})"
+                'sql_servers が参照するテンプレートが見つかりません:'
+                f' template={template_name!r}'
+                f' (定義済み: {sorted(templates)})'
             )
         merged = {
             k: v for k, v in templates[template_name].items() if k != 'name'
@@ -192,9 +195,7 @@ def _expand_server_templates(config: dict[str, Any]) -> dict[str, Any]:
             merged[k] = v
         expanded_servers.append(merged)
 
-    expanded = {
-        k: v for k, v in config.items() if k != 'sql_server_templates'
-    }
+    expanded = {k: v for k, v in config.items() if k != 'sql_server_templates'}
     expanded['sql_servers'] = expanded_servers
     return expanded
 
@@ -211,9 +212,7 @@ def load_config(config_filename: str = 'config.yaml') -> dict[str, Any]:
     if config_yaml_env:
         data = _parse_yaml(config_yaml_env, 'SQL_AGENT_CONFIG_YAML 環境変数')
     else:
-        getter_command = os.environ.get(
-            'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND'
-        )
+        getter_command = os.environ.get('SQL_AGENT_CONFIG_YAML_GETTER_COMMAND')
         if getter_command:
             yaml_text = _run_getter_command(getter_command)
             data = _parse_yaml(
@@ -225,9 +224,9 @@ def load_config(config_filename: str = 'config.yaml') -> dict[str, Any]:
             config_path = os.path.join(current_dir, config_filename)
             if not os.path.exists(config_path):
                 raise FileNotFoundError(
-                    f"Config file not found: {config_path}"
+                    f'Config file not found: {config_path}'
                 )
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, encoding='utf-8') as f:
                 data = _parse_yaml(f.read(), config_path)
 
     return _expand_server_templates(data)
@@ -256,7 +255,7 @@ def get_cache_path() -> str:
 
 
 def _sanitize_for_cache(config: dict[str, Any]) -> dict[str, Any]:
-    """config から機密を除いた、起動時に必要なメタデータだけを抽出する。"""
+    """Config から機密を除いた、起動時に必要なメタデータだけを抽出する。"""
     servers = []
     for server in config.get('sql_servers', []):
         servers.append(
@@ -281,9 +280,7 @@ def save_metadata_cache(config: dict[str, Any]) -> None:
         # makedirs の mode は umask の影響を受けるので chmod で確実に締める。
         os.chmod(cache_dir, 0o700)
         # host / port / schema 等が他ユーザーに読まれないよう owner のみ (0o600)。
-        fd = os.open(
-            cache_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
-        )
+        fd = os.open(cache_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump(_sanitize_for_cache(config), f, ensure_ascii=False)
     except Exception:
@@ -299,7 +296,7 @@ def load_metadata_cache() -> dict[str, Any] | None:
     if not os.path.exists(cache_path):
         return None
     try:
-        with open(cache_path, 'r', encoding='utf-8') as f:
+        with open(cache_path, encoding='utf-8') as f:
             data = json.load(f)
     except Exception:
         return None

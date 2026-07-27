@@ -15,12 +15,11 @@
   "python.analysis.autoImportCompletions": true,
   "python.languageServer": "Pylance",
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter",
-    "editor.formatOnSave": true
-  },
-  "black-formatter.args": [
-    "--line-length=79",
-    "--target-version=py313",
-    "--skip-string-normalization"
-  ]
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  }
 }

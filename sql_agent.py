@@ -6,9 +6,10 @@ SQL Agent - Core class for managing SQL connections and query execution
 import decimal
 import os
 import re
+from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import date, datetime
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 import psycopg2
 import psycopg2.extras
@@ -31,23 +32,24 @@ _SQL_STRING_LITERAL_RE = re.compile(r"'(?:[^'\\]|\\.|'')*'")
 #   - タグ無し: $$...$$ (\1 は空文字にマッチ)
 #   - タグ付き: $tag$...$tag$
 # 本文は改行を含みうるので [\s\S] で全文字を非貪欲にマッチさせる。
-_SQL_DOLLAR_QUOTE_RE = re.compile(r"\$(\w*)\$[\s\S]*?\$\1\$")
+_SQL_DOLLAR_QUOTE_RE = re.compile(r'\$(\w*)\$[\s\S]*?\$\1\$')
 
 
 def mask_sql_for_log(sql: str) -> str:
     """ログ出力用に SQL の文字列リテラルをマスクする (PII / 機密漏れ防止)"""
     # ドルクォートを先にマスクする (本文に ' を含んでいても丸ごと潰すため)。
-    masked = _SQL_DOLLAR_QUOTE_RE.sub("$$***$$", sql)
+    masked = _SQL_DOLLAR_QUOTE_RE.sub('$$***$$', sql)
     return _SQL_STRING_LITERAL_RE.sub("'***'", masked)
 
 
 class SQLAgent:
     """Class for managing SQL database connections and query execution"""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """
         Args:
             config: データベース設定
+
         """
         self.config = config
         self.connection = None
@@ -58,6 +60,7 @@ class SQLAgent:
 
         Args:
             ssh_tunnel: 使用する SSH トンネル (SSH トンネル経由の場合)
+
         """
         try:
             # SSH トンネル経由の場合はローカルホストとポートを使用
@@ -89,14 +92,14 @@ class SQLAgent:
                 )
             else:
                 raise ValueError(
-                    f"Unsupported engine: {self.config['engine']}"
+                    f'Unsupported engine: {self.config["engine"]}'
                 )
 
-            logger.info(f"データベースに接続しました: {self.config['name']}")
+            logger.info(f'データベースに接続しました: {self.config["name"]}')
 
         except Exception as e:
             logger.error(
-                f"データベース接続エラー ({self.config['name']}): {e}"
+                f'データベース接続エラー ({self.config["name"]}): {e}'
             )
             raise
 
@@ -105,9 +108,9 @@ class SQLAgent:
         if self.connection:
             self.connection.close()
             self.connection = None
-            logger.info(f"データベースから切断しました: {self.config['name']}")
+            logger.info(f'データベースから切断しました: {self.config["name"]}')
 
-    def execute_query(self, sql: str) -> Dict[str, Any]:
+    def execute_query(self, sql: str) -> dict[str, Any]:
         """
         SQL クエリを実行する
         SSH トンネルが設定されている場合は、クエリ実行毎にトンネルを作成・クローズする
@@ -117,6 +120,7 @@ class SQLAgent:
 
         Returns:
             クエリ結果を含む辞書
+
         """
         ssh_tunnel = None
 
@@ -130,7 +134,7 @@ class SQLAgent:
 
             sql_for_log = mask_sql_for_log(sql)
             logger.info(
-                f"クエリ実行開始 ({self.config['name']}): {sql_for_log}"
+                f'クエリ実行開始 ({self.config["name"]}): {sql_for_log}'
             )
 
             with self.connection.cursor() as cursor:
@@ -162,7 +166,7 @@ class SQLAgent:
                         'server_name': self.config['name'],
                     }
                     logger.info(
-                        f"クエリ実行成功 ({self.config['name']}): {len(rows)} 行取得"
+                        f'クエリ実行成功 ({self.config["name"]}): {len(rows)} 行取得'
                     )
                 except (
                     psycopg2.ProgrammingError,
@@ -170,8 +174,8 @@ class SQLAgent:
                 ) as e:
                     # 結果がないため fetchall が失敗する場合 (INSERT, UPDATE, DELETE など)
                     logger.info(
-                        f"クエリ実行成功だが fetchall に失敗: {self.config['name']}, "
-                        f"{e.__class__.__name__}: {e}"
+                        f'クエリ実行成功だが fetchall に失敗: {self.config["name"]}, '
+                        f'{e.__class__.__name__}: {e}'
                     )
                     self.connection.commit()
                     affected_rows = cursor.rowcount
@@ -193,21 +197,20 @@ class SQLAgent:
                     else sql_for_log
                 )
                 logger.info(
-                    f"クエリ実行完了 ({self.config['name']}): {sql_log_tail}"
+                    f'クエリ実行完了 ({self.config["name"]}): {sql_log_tail}'
                 )
                 return result
 
         except Exception as e:
             logger.error(
-                f"クエリ実行エラー ({self.config['name']}): {e.__class__.__name__}: {e}"
+                f'クエリ実行エラー ({self.config["name"]}): {e.__class__.__name__}: {e}'
             )
-            result = {
+            return {
                 'success': False,
                 'query': sql,
                 'error': f'{e.__class__.__name__}: {e}',
                 'server_name': self.config['name'],
             }
-            return result
 
         finally:
             # 接続を閉じる
@@ -216,7 +219,7 @@ class SQLAgent:
             # SSH トンネルを閉じる
             if ssh_tunnel:
                 ssh_tunnel.stop()
-                logger.info(f"SSH トンネルを閉じました: {self.config['name']}")
+                logger.info(f'SSH トンネルを閉じました: {self.config["name"]}')
 
     def _make_serializable(self, data: Any) -> Any:
         """
@@ -227,19 +230,20 @@ class SQLAgent:
 
         Returns:
             シリアライズ可能なデータ
+
         """
         if isinstance(data, list):
             return [self._make_serializable(item) for item in data]
-        elif isinstance(data, dict):
+        if isinstance(data, dict):
             return {
                 key: self._make_serializable(value)
                 for key, value in data.items()
             }
-        elif isinstance(data, (datetime, date)):
+        if isinstance(data, (datetime, date)):
             return data.isoformat()
-        elif isinstance(data, decimal.Decimal):
+        if isinstance(data, decimal.Decimal):
             return float(data)
-        elif isinstance(data, bytes):
+        if isinstance(data, bytes):
             try:
                 return data.decode('utf-8')
             except UnicodeDecodeError:
@@ -271,7 +275,7 @@ class SQLAgent:
             # SSH トンネルを閉じる
             if ssh_tunnel:
                 ssh_tunnel.stop()
-                logger.info(f"SSH トンネルを閉じました: {self.config['name']}")
+                logger.info(f'SSH トンネルを閉じました: {self.config["name"]}')
 
     def __enter__(self):
         """
@@ -280,7 +284,9 @@ class SQLAgent:
         """
         if 'ssh_tunnel' in self.config:
             logger.warning(
-                f"SSH トンネルが設定されているため connection_context() の使用を推奨します: {self.config['name']}"
+                f'SSH トンネルが設定されているため'
+                f' connection_context() の使用を推奨します:'
+                f' {self.config["name"]}'
             )
         self.connect()
         return self
@@ -291,6 +297,7 @@ class SQLAgent:
 
         Returns:
             SSH トンネルインスタンス
+
         """
         ssh_config = self.config['ssh_tunnel']
 
@@ -326,8 +333,8 @@ class SQLAgent:
         ssh_tunnel.start()
 
         logger.info(
-            f"SSH トンネルを確立しました: {ssh_config['host']}:{ssh_config.get('port', 22)} -> "
-            f"{self.config['host']}:{self.config['port']}"
+            f'SSH トンネルを確立しました: {ssh_config["host"]}:{ssh_config.get("port", 22)} -> '
+            f'{self.config["host"]}:{self.config["port"]}'
         )
 
         return ssh_tunnel
@@ -340,21 +347,22 @@ class SQLAgent:
 class SQLAgentManager:
     """複数の SQL Agent を管理するクラス"""
 
-    def __init__(self, config_loader: Callable[[], Dict[str, Any]]):
+    def __init__(self, config_loader: Callable[[], dict[str, Any]]):
         """
         Args:
             config_loader: config (dict) を返す callable。実際に config が
                 必要になった初回アクセス時に一度だけ呼ばれる。getter command
                 経由の場合、この呼び出しが 1Password 等の認証をトリガーする。
+
         """
         self._config_loader = config_loader
         self._loaded = False
-        self.servers_config: List[Dict[str, Any]] = []
-        self.server_configs: Dict[str, Dict[str, Any]] = {}
+        self.servers_config: list[dict[str, Any]] = []
+        self.server_configs: dict[str, dict[str, Any]] = {}
         self.agents = {}
 
     def _ensure_loaded(self) -> None:
-        """config を初回アクセス時に一度だけロードする (memoize)。"""
+        """Config を初回アクセス時に一度だけロードする (memoize)。"""
         if self._loaded:
             return
 
@@ -379,7 +387,7 @@ class SQLAgentManager:
                 setup_logger_for_mcp_server(config['log_file_path'])
             except Exception as e:
                 logger.warning(
-                    f"log_file_path への切り替えに失敗 (既存ロガーで続行): {e}"
+                    f'log_file_path への切り替えに失敗 (既存ロガーで続行): {e}'
                 )
 
         self._loaded = True
@@ -394,26 +402,28 @@ class SQLAgentManager:
 
         Returns:
             SQL Agent インスタンス
+
         """
         self._ensure_loaded()
         if server_name not in self.server_configs:
-            raise ValueError(f"Server not found: {server_name}")
+            raise ValueError(f'Server not found: {server_name}')
 
         # SQLAgent が未作成の場合は遅延生成
         if server_name not in self.agents:
             self.agents[server_name] = SQLAgent(
                 self.server_configs[server_name]
             )
-            logger.info(f"SQLAgent を遅延生成しました: {server_name}")
+            logger.info(f'SQLAgent を遅延生成しました: {server_name}')
 
         return self.agents[server_name]
 
-    def get_server_list(self) -> List[Dict[str, Any]]:
+    def get_server_list(self) -> list[dict[str, Any]]:
         """
         登録されているサーバーの一覧を取得する
 
         Returns:
             サーバー情報のリスト
+
         """
         self._ensure_loaded()
         servers = []
