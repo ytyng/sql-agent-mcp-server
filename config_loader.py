@@ -2,14 +2,23 @@
 SQL Agent の設定ローダー。
 
 設定 (YAML) の解決順:
-    1. SQL_AGENT_CONFIG_YAML 環境変数 (YAML 文字列リテラル)
-    2. SQL_AGENT_CONFIG_YAML_GETTER_COMMAND 環境変数 (実行して stdout を YAML として使う)
-    3. 同ディレクトリの config.yaml ファイル
+    1. SQL_AGENT_CONFIG_YAML 環境変数 (YAML 文字列リテラル。開発・テスト用)
+    2. ~/.config/sql-agent-mcp-server/config.yaml
 
-2 番の getter command は「秘密の取得コマンド (例: `op read op://...`)」を
-環境変数に置いておき、実際に config が必要になった時だけ実行することを想定する。
-これにより MCP サーバー起動時ではなく、ツール呼び出し時まで 1Password 等の
-認証を遅延できる。コマンドは shlex.split で argv に分解し shell=False で実行する
+設定ファイルの場所は決め打ちで、プロジェクトディレクトリは見ない。
+リポジトリの中に設定を置くと、チェックアウトごとに設定が分裂し、
+パスワード入りのファイルを誤ってコミットする事故も起きやすいため。
+
+読み込んだ設定に config_override_command があれば実行し、その stdout を
+YAML として設定へ再帰マージする (取得した側が優先)。これは
+「秘密は 1Password 等に置き、ローカルの config.yaml には平文で持たない」
+ための仕組みで、queryfolio の同名キーと同じ方式。
+
+    config_override_command: op read "op://development/sql-agent/config-yaml"
+
+コマンドは実際に config が必要になった時に実行されるため、MCP サーバーの
+起動時ではなくツール呼び出し時まで 1Password の認証を遅延できる。
+コマンドは shlex.split で argv に分解し shell=False で実行する
 (シェルを介さないのでパイプ/リダイレクト/変数展開は不可。単一コマンド前提)。
 
 機密を含まないサーバーメタデータ (name / description / engine / host / port /
@@ -24,6 +33,7 @@ sql_server_templates (接続情報の雛形) にも対応する。同一 DB イ�
 sql_servers を受け取る。
 """
 
+import copy
 import json
 import os
 import shlex
@@ -31,6 +41,26 @@ import subprocess
 from typing import Any
 
 import yaml
+
+# 設定ファイルの置き場所 (決め打ち)。
+CONFIG_DIR = '~/.config/sql-agent-mcp-server'
+CONFIG_FILENAME = 'config.yaml'
+
+# 設定を上書きする YAML を取得するコマンドのキー。
+CONFIG_OVERRIDE_COMMAND_KEY = 'config_override_command'
+
+# 廃止した環境変数。設定されたまま黙って無視すると、秘密が読まれずに
+# 「サーバーが 1 件も無い」等の分かりにくい失敗になるため、明示的に案内する。
+_REMOVED_GETTER_COMMAND_ENV = 'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND'
+
+
+def get_config_path() -> str:
+    """
+    設定ファイルのパス (~/.config/sql-agent-mcp-server/config.yaml)。
+
+    HOME を見て毎回組み立てる (モジュール読み込み時に固定しない)。
+    """
+    return os.path.join(os.path.expanduser(CONFIG_DIR), CONFIG_FILENAME)
 
 
 def _parse_yaml(yaml_text: str, source: str) -> dict[str, Any]:
@@ -52,9 +82,9 @@ def _parse_yaml(yaml_text: str, source: str) -> dict[str, Any]:
     return data
 
 
-def _run_getter_command(command: str) -> str:
+def _run_override_command(command: str) -> str:
     """
-    Getter command を実行して stdout を返す。
+    config_override_command を実行して stdout を返す。
 
     `op read "op://..."` を shlex.split で argv に分解し、shell=False で実行する。
     shell を介さないため、コマンド文字列に `;` `|` `$()` 等が混入しても
@@ -66,17 +96,17 @@ def _run_getter_command(command: str) -> str:
     except ValueError as e:
         # クォートが閉じていない等で分解に失敗
         raise ValueError(
-            f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND の解析に失敗'
+            f'{CONFIG_OVERRIDE_COMMAND_KEY} の解析に失敗'
             f' (クォート不整合等): {command!r}: {e}'
         ) from e
     if not argv:
-        raise ValueError('SQL_AGENT_CONFIG_YAML_GETTER_COMMAND が空です')
+        raise ValueError(f'{CONFIG_OVERRIDE_COMMAND_KEY} が空です')
 
     try:
         # S603: shell=False なのでシェルメタ文字による注入は起きない
-        # (上記 docstring 参照)。argv そのものは環境変数
-        # SQL_AGENT_CONFIG_YAML_GETTER_COMMAND 由来であり、これは MCP クライアントの
-        # 起動設定として管理される信頼済みの入力という前提で扱う。
+        # (上記 docstring 参照)。argv そのものは設定ファイル
+        # (~/.config/sql-agent-mcp-server/config.yaml) 由来であり、
+        # これは利用者自身が管理する信頼済みの入力という前提で扱う。
         result = subprocess.run(  # noqa: S603
             argv,
             shell=False,
@@ -89,29 +119,74 @@ def _run_getter_command(command: str) -> str:
         )
     except subprocess.TimeoutExpired as e:
         raise ValueError(
-            f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND がタイムアウト'
+            f'{CONFIG_OVERRIDE_COMMAND_KEY} がタイムアウト'
             f' ({e.timeout}秒): {command!r}'
             f' (1Password 等の認証待ちでハングしている可能性)'
         ) from e
     except Exception as e:
         raise ValueError(
-            f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND の実行に失敗:'
-            f' {command!r}: {e}'
+            f'{CONFIG_OVERRIDE_COMMAND_KEY} の実行に失敗: {command!r}: {e}'
         ) from e
 
     if result.returncode != 0:
         raise ValueError(
-            f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND が異常終了'
+            f'{CONFIG_OVERRIDE_COMMAND_KEY} が異常終了'
             f' (code={result.returncode}): {command!r}\n'
             f'stderr: {result.stderr.strip()}'
         )
 
     if not result.stdout.strip():
         raise ValueError(
-            f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND の出力が空: {command!r}'
+            f'{CONFIG_OVERRIDE_COMMAND_KEY} の出力が空: {command!r}'
         )
 
     return result.stdout
+
+
+def _merge_mapping(base: dict[str, Any], over: dict[str, Any]) -> None:
+    """
+    Over を base へ再帰的にマージする (over 側が優先)。base を破壊的に更新する。
+
+    値がどちらもマッピングの時だけ中へ入って混ぜ、それ以外 (スカラー・リスト)
+    は over で丸ごと置き換える。sql_servers のようなリストを要素単位で
+    マージしないのは、どの要素が「同じ項目」かを決める安定した同一性が無いため
+    (name 一致で混ぜると意図しない部分適用が起きる)。
+    """
+    for key, over_value in over.items():
+        base_value = base.get(key)
+        if isinstance(base_value, dict) and isinstance(over_value, dict):
+            _merge_mapping(base_value, over_value)
+        else:
+            base[key] = over_value
+
+
+def _apply_config_override(config: dict[str, Any]) -> dict[str, Any]:
+    """
+    config_override_command があれば実行し、取得した YAML を再帰マージする。
+
+    取得した YAML の中に config_override_command があっても再帰取得はしない
+    (適用済みであることを示すためキー自体を落とす)。
+    """
+    command = config.get(CONFIG_OVERRIDE_COMMAND_KEY)
+    if command is None:
+        return config
+
+    if not isinstance(command, str) or not command.strip():
+        raise ValueError(
+            f'{CONFIG_OVERRIDE_COMMAND_KEY} は空でない文字列である必要があります'
+        )
+
+    yaml_text = _run_override_command(command)
+    overrides = _parse_yaml(
+        yaml_text,
+        f'{CONFIG_OVERRIDE_COMMAND_KEY} ({command})',
+    )
+
+    # 呼び出し元が渡した dict を書き換えないようコピーしてからマージする。
+    merged = copy.deepcopy(config)
+    _merge_mapping(merged, overrides)
+    merged.pop(CONFIG_OVERRIDE_COMMAND_KEY, None)
+    return merged
 
 
 def _expand_server_templates(config: dict[str, Any]) -> dict[str, Any]:
@@ -200,35 +275,59 @@ def _expand_server_templates(config: dict[str, Any]) -> dict[str, Any]:
     return expanded
 
 
-def load_config(config_filename: str = 'config.yaml') -> dict[str, Any]:
+def _reject_removed_env() -> None:
+    """
+    廃止した SQL_AGENT_CONFIG_YAML_GETTER_COMMAND が残っていたら移行を促す。
+
+    黙って無視すると、秘密が読まれないまま設定ファイル側だけが使われ、
+    「サーバーが 1 件も見つからない」といった原因の分かりにくい失敗になる。
+    """
+    if os.environ.get(_REMOVED_GETTER_COMMAND_ENV):
+        raise ValueError(
+            f'{_REMOVED_GETTER_COMMAND_ENV} は廃止されました。'
+            f' 同じことは {get_config_path()} に'
+            f' {CONFIG_OVERRIDE_COMMAND_KEY} を書くことで行えます'
+            f' (例: {CONFIG_OVERRIDE_COMMAND_KEY}:'
+            ' op read "op://development/sql-agent/config-yaml")。'
+            f' 移行後は {_REMOVED_GETTER_COMMAND_ENV} を環境変数から外してください'
+        )
+
+
+def load_config() -> dict[str, Any]:
     """
     設定を読み込んで dict で返す。
 
-    解決順はモジュール docstring を参照。getter command が設定されている
-    場合はここで実行されるため、この関数の呼び出しが 1Password 等の認証を
+    解決順はモジュール docstring を参照。config_override_command が設定されて
+    いる場合はここで実行されるため、この関数の呼び出しが 1Password 等の認証を
     トリガーしうる点に注意 (= 起動時ではなく実際に config が要る時に呼ぶ)。
+
+    config_override_command は SQL_AGENT_CONFIG_YAML 経由で読んだ設定にも
+    適用する (取得元によらず「読み込んだ設定に対する上書き」として扱う)。
+    どちらの経路もプロセスの起動設定と同じ信頼境界にあるため、
+    環境変数側だけコマンド実行を禁じても防御にはならない。
     """
     config_yaml_env = os.environ.get('SQL_AGENT_CONFIG_YAML')
     if config_yaml_env:
         data = _parse_yaml(config_yaml_env, 'SQL_AGENT_CONFIG_YAML 環境変数')
     else:
-        getter_command = os.environ.get('SQL_AGENT_CONFIG_YAML_GETTER_COMMAND')
-        if getter_command:
-            yaml_text = _run_getter_command(getter_command)
-            data = _parse_yaml(
-                yaml_text,
-                f'SQL_AGENT_CONFIG_YAML_GETTER_COMMAND ({getter_command})',
-            )
-        else:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(current_dir, config_filename)
-            if not os.path.exists(config_path):
-                raise FileNotFoundError(
-                    f'Config file not found: {config_path}'
-                )
-            with open(config_path, encoding='utf-8') as f:
-                data = _parse_yaml(f.read(), config_path)
+        # 廃止した getter 環境変数の検出は、設定ファイルを使う経路に限る。
+        # SQL_AGENT_CONFIG_YAML で設定が渡っている場合、旧実装でも getter は
+        # 参照されなかったので、残っていても実害が無い。ここで一律に落とすと
+        # 「使っていない環境変数が残っているだけ」で動かなくなってしまう。
+        _reject_removed_env()
 
+        config_path = get_config_path()
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(
+                f'Config file not found: {config_path}'
+                ' (config.example.yaml を参考に作成してください)'
+            )
+        with open(config_path, encoding='utf-8') as f:
+            data = _parse_yaml(f.read(), config_path)
+
+    # テンプレート展開より先に上書きを適用する。上書き側から
+    # sql_server_templates / sql_servers を丸ごと差し替えられるようにするため。
+    data = _apply_config_override(data)
     return _expand_server_templates(data)
 
 

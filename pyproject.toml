@@ -164,6 +164,12 @@ max-line-length = 110
     'S110', # try-except-pass
     'SIM105', # contextlib.suppress への書き換え提案。上記と同じ箇所
 ]
+# テストは標準ライブラリの unittest で書いている (pytest は依存に入れていない)。
+# PT 系は pytest スタイルを前提にしたルールなのでテストファイルでは対象外にする
+'test_config_loader.py' = [
+    'PT009', # assertEqual 等ではなく素の assert を使うことを促す
+    'PT027', # assertRaises ではなく pytest.raises を使うことを促す
+]
 
 [tool.ruff.format]
 # 旧 black は --skip-string-normalization で既存のクォートを維持していた。
