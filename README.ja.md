@@ -7,6 +7,8 @@ MySQL と PostgreSQL に接続してクエリを実行できる MCP サーバー
 - **設定キー名の変更**: `mysql_servers` → `sql_servers`。`config.yaml` を更新する必要あり。旧キーは認識されない。
 - **PostgreSQL の行形式**: cursor を `DictCursor` から `RealDictCursor` に変更。SELECT の rows が普通の dict (`[{"col": value}]`) になり、旧来の list 形 `DictRow` (`[[value]]`) ではなくなった。これはバグ修正。Postgres 結果に対して位置アクセスをしていたクライアントはキーアクセスに変更が必要。
 - **`python-dotenv` 依存削除**: `.env` の自動読み込みは廃止。環境変数 (`SQL_AGENT_CONFIG_YAML`, `SQL_AGENT_LOG_FILE_PATH`) は MCP クライアントの `env` ブロックやシェルから渡す。`config.yaml` の代わりに `SQL_AGENT_CONFIG_YAML` で YAML 文字列をインライン指定もできる。
+- **設定ファイルの場所変更**: プロジェクトディレクトリの `config.yaml` と `.loadenv.sh` は読まなくなった。設定は `~/.config/sql-agent-mcp-server/config.yaml` の決め打ち。既存の `config.yaml` はこの場所へ移動する。
+- **`SQL_AGENT_CONFIG_YAML_GETTER_COMMAND` 廃止**: 同じことは `config.yaml` の `config_override_command` で行う (後述)。環境変数が残っている場合は移行を促すエラーになる。
 
 ## 機能
 
@@ -14,7 +16,7 @@ MySQL と PostgreSQL に接続してクエリを実行できる MCP サーバー
 - MySQL と PostgreSQL の両方をサポート
 - SSH トンネル経由での接続サポート
 - MCP サーバーまたは CLI から SQL クエリを実行
-- `config.yaml`、`SQL_AGENT_CONFIG_YAML`、または秘密マネージャー向けの遅延 getter コマンド (`SQL_AGENT_CONFIG_YAML_GETTER_COMMAND`) による設定
+- `~/.config/sql-agent-mcp-server/config.yaml` による設定。秘密マネージャー向けの上書きコマンド (`config_override_command`) と、開発用のインライン指定 (`SQL_AGENT_CONFIG_YAML`) にも対応
 
 ## インストール
 
@@ -25,19 +27,35 @@ uv sync
 
 ## 設定
 
-`config.yaml` ファイルを作成して、接続するデータベースサーバーの情報を設定します。設定は次の優先順で解決されます:
+`~/.config/sql-agent-mcp-server/config.yaml` を作成して、接続するデータベースサーバーの情報を設定します。**この場所は決め打ちで、プロジェクトディレクトリの `config.yaml` は読みません。**
 
-1. `SQL_AGENT_CONFIG_YAML` — YAML 文字列をインライン指定 (最優先)
-2. `SQL_AGENT_CONFIG_YAML_GETTER_COMMAND` — stdout が YAML 設定になるコマンド (遅延実行。後述)
-3. プロジェクトディレクトリの `config.yaml` ファイル
-
-#### 設定の遅延ロード (`SQL_AGENT_CONFIG_YAML_GETTER_COMMAND`)
-
-設定を秘密マネージャー (例: 1Password) に置いている場合、秘密そのものではなく **取得コマンド** を渡せます:
-
-```sh
-export SQL_AGENT_CONFIG_YAML_GETTER_COMMAND='op read "op://development/sql-agent/config-yaml"'
+```bash
+mkdir -p ~/.config/sql-agent-mcp-server
+cp config.example.yaml ~/.config/sql-agent-mcp-server/config.yaml
+chmod 600 ~/.config/sql-agent-mcp-server/config.yaml
 ```
+
+設定は次の優先順で解決されます:
+
+1. `SQL_AGENT_CONFIG_YAML` — YAML 文字列をインライン指定 (最優先。開発・テスト用)
+2. `~/.config/sql-agent-mcp-server/config.yaml`
+
+そのうえで、読み込んだ設定に `config_override_command` があれば実行し、取得した YAML を **上書きマージ**します (後述)。
+
+#### 秘密の外部化 (`config_override_command`)
+
+設定を秘密マネージャー (例: 1Password) に置いている場合、秘密そのものをローカルの `config.yaml` に書かず、**取得コマンド**だけを書けます (queryfolio と同じ方式):
+
+```yaml
+config_override_command: op read "op://development/sql-agent/config-yaml"
+```
+
+コマンドの stdout は YAML として解釈され、ローカルの設定へ再帰的にマージされます。**取得した側が優先**です。
+
+- マッピング同士は再帰的に混ざる (例: `log_file_path` はローカル、`sql_servers` は 1Password 側、といった分担ができる)
+- スカラーとリスト (`sql_servers` / `sql_server_templates` を含む) は丸ごと置き換わる
+- 取得した YAML の中に `config_override_command` があっても再帰取得はしない
+- `SQL_AGENT_CONFIG_YAML` で渡した設定にも同じように適用される (取得元で挙動を変えない)
 
 このコマンドは **起動時には実行されません**。実際に設定が必要になった時 — つまり最初の `list_sql_servers` / `execute_sql` 呼び出し時 — にだけ実行されます。これにより、MCP クライアント (例: Claude Desktop) がサーバーを起動するたびに 1Password 等の認証ダイアログが出るのを防げます。
 
@@ -190,6 +208,6 @@ python3 test-requests/test_mangazenkan_dev.py
 
 ## セキュリティに関する注意
 
-- `config.yaml` にはデータベースのパスワードが含まれるため、適切に管理してください
+- `~/.config/sql-agent-mcp-server/config.yaml` にはデータベースのパスワードが含まれるため、適切に管理してください (`chmod 600` を推奨)
+- パスワードをローカルに平文で置きたくない場合は `config_override_command` で 1Password 等から取得してください
 - SSH 秘密鍵を使用する場合は、適切なファイルパーミッションを設定してください
-- 本番環境では環境変数や秘密管理ツールの使用を検討してください

@@ -11,6 +11,8 @@ An MCP server that connects to MySQL and PostgreSQL databases to execute queries
 - **Config key rename**: `mysql_servers` → `sql_servers`. Update your `config.yaml`. The old key is no longer recognized.
 - **PostgreSQL row format**: The cursor was changed from `DictCursor` to `RealDictCursor`, so SELECT result rows are now plain dicts (`[{"col": value}]`) instead of list-shaped `DictRow` (`[[value]]`). This is a bug fix — clients that depended on positional access on Postgres results need to switch to key access.
 - **`python-dotenv` dependency removed**: `.env` files are no longer auto-loaded. Pass environment variables (`SQL_AGENT_CONFIG_YAML`, `SQL_AGENT_LOG_FILE_PATH`) via your MCP client's `env` block, or via your shell. Inline YAML can also be passed via `SQL_AGENT_CONFIG_YAML` instead of using a `config.yaml` file.
+- **Config file location changed**: The project directory's `config.yaml` and `.loadenv.sh` are no longer read. Config is now looked up at the fixed path `~/.config/sql-agent-mcp-server/config.yaml`. Move your existing `config.yaml` there.
+- **`SQL_AGENT_CONFIG_YAML_GETTER_COMMAND` removed**: Use `config_override_command` inside `config.yaml` instead (see below). If the environment variable is still set, loading fails with a message explaining the migration.
 
 ## Features
 
@@ -18,7 +20,7 @@ An MCP server that connects to MySQL and PostgreSQL databases to execute queries
 - Support for both MySQL and PostgreSQL
 - SSH tunnel connection support
 - Execute SQL queries via MCP server or CLI
-- Configuration via `config.yaml`, `SQL_AGENT_CONFIG_YAML`, or a lazy getter command (`SQL_AGENT_CONFIG_YAML_GETTER_COMMAND`) for secret managers
+- Configuration via `~/.config/sql-agent-mcp-server/config.yaml`, with an override command (`config_override_command`) for secret managers and inline YAML (`SQL_AGENT_CONFIG_YAML`) for development
 
 ## Installation
 
@@ -29,19 +31,35 @@ uv sync
 
 ## Configuration
 
-Create a `config.yaml` file to configure database server connection information. Config is resolved in this order:
+Create `~/.config/sql-agent-mcp-server/config.yaml` to configure database server connection information. **This path is fixed — the project directory's `config.yaml` is not read.**
 
-1. `SQL_AGENT_CONFIG_YAML` — inline YAML string (highest precedence)
-2. `SQL_AGENT_CONFIG_YAML_GETTER_COMMAND` — a command whose stdout is the YAML config (run lazily; see below)
-3. `config.yaml` file in the project directory
-
-#### Lazy config loading (`SQL_AGENT_CONFIG_YAML_GETTER_COMMAND`)
-
-If your config lives in a secret manager (e.g. 1Password), pass the *command* that fetches it instead of the secret itself:
-
-```sh
-export SQL_AGENT_CONFIG_YAML_GETTER_COMMAND='op read "op://development/sql-agent/config-yaml"'
+```bash
+mkdir -p ~/.config/sql-agent-mcp-server
+cp config.example.yaml ~/.config/sql-agent-mcp-server/config.yaml
+chmod 600 ~/.config/sql-agent-mcp-server/config.yaml
 ```
+
+Config is resolved in this order:
+
+1. `SQL_AGENT_CONFIG_YAML` — inline YAML string (highest precedence; for development and tests)
+2. `~/.config/sql-agent-mcp-server/config.yaml`
+
+Then, if the loaded config has a `config_override_command`, it is run and the YAML it prints is **merged over** the config (see below).
+
+#### Keeping secrets out of the config file (`config_override_command`)
+
+If your config lives in a secret manager (e.g. 1Password), put the *command* that fetches it in the config instead of the secrets themselves (the same mechanism queryfolio uses):
+
+```yaml
+config_override_command: op read "op://development/sql-agent/config-yaml"
+```
+
+The command's stdout is parsed as YAML and merged recursively into the local config. **The fetched side wins.**
+
+- Mappings are merged recursively (so you can keep `log_file_path` local while `sql_servers` comes from 1Password)
+- Scalars and lists (including `sql_servers` / `sql_server_templates`) are replaced wholesale
+- A `config_override_command` inside the fetched YAML is **not** followed recursively
+- It applies the same way to config passed via `SQL_AGENT_CONFIG_YAML` (behaviour does not depend on where the config came from)
 
 The command is **not** run at startup. It runs only when config is first actually needed — i.e. on the first `list_sql_servers` / `execute_sql` call. This avoids triggering a 1Password (etc.) authentication prompt every time the MCP client (e.g. Claude Desktop) launches the server.
 
@@ -201,9 +219,9 @@ python3 test-requests/test_mangazenkan_dev.py
 
 ## Security Considerations
 
-- `config.yaml` contains database passwords, so manage it appropriately
+- `~/.config/sql-agent-mcp-server/config.yaml` contains database passwords, so manage it appropriately (`chmod 600` recommended)
+- To avoid keeping passwords in plaintext locally, fetch them from 1Password (etc.) via `config_override_command`
 - When using SSH private keys, set appropriate file permissions
-- Consider using environment variables or secret management tools in production environments
 
 ## License
 

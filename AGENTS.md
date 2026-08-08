@@ -24,13 +24,18 @@ This project provides a server that can execute SQL queries against multiple dat
 
 - `mcp_server.py`: Main implementation of the MCP server
 - `sql_agent.py`: Database connection and query execution logic
-- `config.yaml`: Database connection configuration
+- `config_loader.py`: Config resolution (fixed path + `config_override_command` merge)
+- `~/.config/sql-agent-mcp-server/config.yaml`: Database connection configuration (fixed path; not in the repo)
+- `config.example.yaml`: Template for the above
 - `launch-mcp-server.sh`: Server startup script
 - `test-requests/`: Test script suite
 
 ## Testing
 
 ```bash
+# Unit tests (stdlib unittest; no pytest dependency)
+python3 -m unittest test_config_loader
+
 # Verify virtual environment and server startup
 ./launch-mcp-server.sh
 
@@ -53,7 +58,9 @@ This project implements the following measures:
 ## Development Notes
 
 - Use `uv add` when adding new dependencies
-- Manage database connection information with `config.yaml`
+- Manage database connection information with `~/.config/sql-agent-mcp-server/config.yaml`.
+  Secrets can be kept out of that file with `config_override_command` (fetches YAML from
+  1Password etc. and merges it over the local config)
 - SSH tunnel functionality can be tested with `test_ssh_tunnel.py`
 - Consider the impact on MCP communication when changing log settings
 

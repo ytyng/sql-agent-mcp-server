@@ -1,3 +1,30 @@
+# SQL Agent MCP Server の設定ファイルのサンプル。
+# ~/.config/sql-agent-mcp-server/config.yaml に置く (この場所は決め打ち)。
+#
+#   mkdir -p ~/.config/sql-agent-mcp-server
+#   cp config.example.yaml ~/.config/sql-agent-mcp-server/config.yaml
+#   chmod 600 ~/.config/sql-agent-mcp-server/config.yaml
+#
+# 開発・テスト用に SQL_AGENT_CONFIG_YAML 環境変数でこのファイル全体の内容を
+# 上書きできる。
+
+# --- 設定を外部から上書きする (任意) ---
+# config_override_command に書いたコマンドを実行し、その stdout (YAML) を
+# この設定へ再帰的にマージする。取得した YAML 側が優先。
+#
+# マージ規則:
+#   - マッピング同士は再帰的に混ざる (例: log_file_path はローカル、
+#     sql_servers は 1Password 側、という分担ができる)
+#   - スカラーとリスト (sql_servers / sql_server_templates を含む) は
+#     丸ごと置き換わる
+#
+# 取得した YAML の中に config_override_command があっても再帰取得はしない。
+# コマンドはシェル非経由で実行される (パイプやリダイレクトは使えない)。
+# 実行は起動時ではなく、最初に設定が必要になった時 (最初のツール呼び出し時)。
+#
+# 1Password から取得する例:
+# config_override_command: op read "op://development/sql-agent/config-yaml"
+
 # ログファイルのパス
 # 解決順: YAML (この値) > 環境変数 SQL_AGENT_LOG_FILE_PATH > デフォルト (/tmp/sql-agent/sql-agent-mcp-server.log)
 log_file_path: /tmp/sql-agent/sql-agent-mcp-server.log
